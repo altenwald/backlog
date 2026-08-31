@@ -88,13 +88,6 @@ func (tm *TrayManager) Refresh() {
 	systray.SetTitle(fmt.Sprintf(" %s %d/%d", activeProject.Name, openCount, totalCount))
 	systray.SetTooltip(fmt.Sprintf("Backlog — [%s] %d/%d pending tasks", activeProject.Name, openCount, totalCount))
 
-	// Status Header Item in Dropdown
-	statusTitle := fmt.Sprintf("[%s] %d/%d Pending", activeProject.Name, openCount, totalCount)
-	statusItem := fyne.NewMenuItem(statusTitle, func() {
-		tm.window.Show()
-		tm.window.RequestFocus()
-	})
-
 	// Top 5 Priorities
 	topTasks, _ := tm.store.GetTopPriorities(activeSlug, 5)
 	var topMenuItems []*fyne.MenuItem
@@ -153,10 +146,7 @@ func (tm *TrayManager) Refresh() {
 	})
 	quitItem.IsQuit = true
 
-	menuItems := []*fyne.MenuItem{
-		statusItem,
-		fyne.NewMenuItemSeparator(),
-	}
+	var menuItems []*fyne.MenuItem
 	menuItems = append(menuItems, topMenuItems...)
 	menuItems = append(menuItems,
 		fyne.NewMenuItemSeparator(),
