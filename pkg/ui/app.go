@@ -58,8 +58,9 @@ func (ba *BacklogApp) buildUI() {
 
 	// Project selector
 	ba.projectSelect = widget.NewSelect([]string{}, func(selectedName string) {
+		activeSlug := ba.store.GetActiveProjectSlug()
 		for _, p := range ba.store.ListProjects() {
-			if p.Name == selectedName || p.Slug == selectedName {
+			if (p.Name == selectedName || p.Slug == selectedName) && p.Slug != activeSlug {
 				_ = ba.store.SetActiveProject(p.Slug)
 				break
 			}
@@ -131,7 +132,10 @@ func (ba *BacklogApp) refreshProjects() {
 		}
 	}
 	ba.projectSelect.Options = options
-	ba.projectSelect.SetSelected(selectedOption)
+	if ba.projectSelect.Selected != selectedOption {
+		ba.projectSelect.Selected = selectedOption
+		ba.projectSelect.Refresh()
+	}
 }
 
 func (ba *BacklogApp) refreshTasks() {
@@ -168,6 +172,11 @@ func (ba *BacklogApp) refreshTasks() {
 	callbacks := TaskCardCallbacks{
 		OnToggleDone: func(taskID string, done bool) {
 			_, _ = ba.store.CompleteTask(activeSlug, taskID, done)
+		},
+		OnEdit: func(task model.Task) {
+			ShowEditTaskDialog(ba.window, task, func(updated model.Task) {
+				_, _ = ba.store.UpdateTask(activeSlug, updated)
+			})
 		},
 		OnDelete: func(taskID string) {
 			_ = ba.store.DeleteTask(activeSlug, taskID)

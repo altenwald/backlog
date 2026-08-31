@@ -71,6 +71,71 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 	}, parent)
 }
 
+func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task model.Task)) {
+	titleEntry := widget.NewEntry()
+	titleEntry.SetText(task.Title)
+
+	descEntry := widget.NewMultiLineEntry()
+	descEntry.SetText(task.Description)
+
+	groupEntry := widget.NewEntry()
+	groupEntry.SetText(task.Group)
+
+	sizeSelect := widget.NewSelect([]string{"XS", "S", "M", "L", "XL"}, nil)
+	sizeSelect.SetSelected(string(task.Size))
+
+	tiers := []string{
+		"1 · Blocker (T1)",
+		"2 · Important (T2)",
+		"3 · Visual debt (T3)",
+		"4 · Internal (T4)",
+		"5 · Future (T5)",
+	}
+	tierIndex := int(task.Tier) - 1
+	if tierIndex < 0 || tierIndex >= len(tiers) {
+		tierIndex = 2
+	}
+	tierSelect := widget.NewSelect(tiers, nil)
+	tierSelect.SetSelected(tiers[tierIndex])
+
+	tagEntry := widget.NewEntry()
+	tagEntry.SetText(task.Tag)
+
+	items := []*widget.FormItem{
+		widget.NewFormItem("Title", titleEntry),
+		widget.NewFormItem("Description", descEntry),
+		widget.NewFormItem("Group / Category", groupEntry),
+		widget.NewFormItem("Effort Size", sizeSelect),
+		widget.NewFormItem("Priority / Tier", tierSelect),
+		widget.NewFormItem("Tag / Reference", tagEntry),
+	}
+
+	dialog.ShowForm("Edit Task #"+task.ID, "Save", "Cancel", items, func(confirmed bool) {
+		if !confirmed || strings.TrimSpace(titleEntry.Text) == "" {
+			return
+		}
+
+		tierNum := int(task.Tier)
+		if len(tierSelect.Selected) > 0 {
+			if num, err := strconv.Atoi(string(tierSelect.Selected[0])); err == nil {
+				tierNum = num
+			}
+		}
+
+		updated := task
+		updated.Title = strings.TrimSpace(titleEntry.Text)
+		updated.Description = strings.TrimSpace(descEntry.Text)
+		updated.Group = strings.TrimSpace(groupEntry.Text)
+		updated.Size = model.Size(sizeSelect.Selected)
+		updated.Tier = model.Tier(tierNum)
+		updated.Tag = strings.TrimSpace(tagEntry.Text)
+
+		if onSave != nil {
+			onSave(updated)
+		}
+	}, parent)
+}
+
 func ShowNewProjectDialog(parent fyne.Window, onSave func(slug, name, desc string)) {
 	slugEntry := widget.NewEntry()
 	slugEntry.SetPlaceHolder("unique slug (e.g. dymmer, conta)")

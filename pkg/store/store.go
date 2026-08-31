@@ -178,6 +178,10 @@ func (s *Store) SetActiveProject(slug string) error {
 		return fmt.Errorf("project '%s' not found", slug)
 	}
 
+	if s.config.ActiveProject == slug {
+		return nil
+	}
+
 	s.config.ActiveProject = slug
 	if err := s.saveConfig(); err != nil {
 		return err
