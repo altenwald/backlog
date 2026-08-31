@@ -16,7 +16,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 
 	descEntry := widget.NewMultiLineEntry()
 	descEntry.Wrapping = fyne.TextWrapWord
-	descEntry.SetMinRowsVisible(8)
+	descEntry.SetMinRowsVisible(6)
 	descEntry.SetPlaceHolder("Details and context (Markdown supported)...")
 
 	groupEntry := widget.NewEntry()
@@ -37,6 +37,11 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 	tagEntry := widget.NewEntry()
 	tagEntry.SetPlaceHolder("e.g. TODO, spec 08-24...")
 
+	resEntry := widget.NewMultiLineEntry()
+	resEntry.Wrapping = fyne.TextWrapWord
+	resEntry.SetMinRowsVisible(3)
+	resEntry.SetPlaceHolder("Implementation details / resolution summary (optional)...")
+
 	items := []*widget.FormItem{
 		widget.NewFormItem("Title", titleEntry),
 		widget.NewFormItem("Description", descEntry),
@@ -44,6 +49,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 		widget.NewFormItem("Effort Size", sizeSelect),
 		widget.NewFormItem("Priority / Tier", tierSelect),
 		widget.NewFormItem("Tag / Reference", tagEntry),
+		widget.NewFormItem("Resolution", resEntry),
 	}
 
 	d := dialog.NewForm("Add Task to "+projectSlug, "Save", "Cancel", items, func(confirmed bool) {
@@ -65,6 +71,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 			Size:        model.Size(sizeSelect.Selected),
 			Tier:        model.Tier(tierNum),
 			Tag:         strings.TrimSpace(tagEntry.Text),
+			Resolution:  strings.TrimSpace(resEntry.Text),
 		}
 
 		if onSave != nil {
@@ -72,7 +79,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 		}
 	}, parent)
 
-	d.Resize(fyne.NewSize(680, 560))
+	d.Resize(fyne.NewSize(680, 580))
 	d.Show()
 }
 
@@ -82,7 +89,7 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 
 	descEntry := widget.NewMultiLineEntry()
 	descEntry.Wrapping = fyne.TextWrapWord
-	descEntry.SetMinRowsVisible(8)
+	descEntry.SetMinRowsVisible(6)
 	descEntry.SetText(task.Description)
 
 	groupEntry := widget.NewEntry()
@@ -108,6 +115,12 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 	tagEntry := widget.NewEntry()
 	tagEntry.SetText(task.Tag)
 
+	resEntry := widget.NewMultiLineEntry()
+	resEntry.Wrapping = fyne.TextWrapWord
+	resEntry.SetMinRowsVisible(4)
+	resEntry.SetPlaceHolder("Summary of implementation details, architectural decisions, and resolution (Markdown supported)...")
+	resEntry.SetText(task.Resolution)
+
 	items := []*widget.FormItem{
 		widget.NewFormItem("Title", titleEntry),
 		widget.NewFormItem("Description", descEntry),
@@ -115,6 +128,7 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 		widget.NewFormItem("Effort Size", sizeSelect),
 		widget.NewFormItem("Priority / Tier", tierSelect),
 		widget.NewFormItem("Tag / Reference", tagEntry),
+		widget.NewFormItem("Resolution / Details", resEntry),
 	}
 
 	d := dialog.NewForm("Edit Task #"+task.ID, "Save", "Cancel", items, func(confirmed bool) {
@@ -136,13 +150,14 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 		updated.Size = model.Size(sizeSelect.Selected)
 		updated.Tier = model.Tier(tierNum)
 		updated.Tag = strings.TrimSpace(tagEntry.Text)
+		updated.Resolution = strings.TrimSpace(resEntry.Text)
 
 		if onSave != nil {
 			onSave(updated)
 		}
 	}, parent)
 
-	d.Resize(fyne.NewSize(680, 560))
+	d.Resize(fyne.NewSize(680, 580))
 	d.Show()
 }
 

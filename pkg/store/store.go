@@ -437,7 +437,7 @@ func (s *Store) AddTask(projectSlug string, task model.Task) (*model.Task, error
 	return &task, nil
 }
 
-func (s *Store) CompleteTask(projectSlug string, taskID string, done bool) (*model.Task, error) {
+func (s *Store) CompleteTask(projectSlug string, taskID string, done bool, resolution ...string) (*model.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -458,6 +458,9 @@ func (s *Store) CompleteTask(projectSlug string, taskID string, done bool) (*mod
 			p.Tasks[i].UpdatedAt = now
 			if done {
 				p.Tasks[i].DoneAt = &now
+				if len(resolution) > 0 && resolution[0] != "" {
+					p.Tasks[i].Resolution = resolution[0]
+				}
 			} else {
 				p.Tasks[i].DoneAt = nil
 			}
@@ -508,6 +511,9 @@ func (s *Store) UpdateTask(projectSlug string, task model.Task) (*model.Task, er
 			}
 			if task.Tier > 0 {
 				p.Tasks[i].Tier = task.Tier
+			}
+			if task.Resolution != "" {
+				p.Tasks[i].Resolution = task.Resolution
 			}
 			p.Tasks[i].Tag = task.Tag
 			p.Tasks[i].UpdatedAt = now

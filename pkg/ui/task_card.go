@@ -90,17 +90,40 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 
 	textCol := container.NewVBox(title)
 
-	// Collapsible Markdown Description with custom clean renderer
+	// Collapsible Markdown Description and Resolution
 	descTrimmed := strings.TrimSpace(task.Description)
-	if descTrimmed != "" {
-		mdWidget := RenderMarkdown(descTrimmed)
-		mdContainer := container.NewPadded(mdWidget)
+	resTrimmed := strings.TrimSpace(task.Resolution)
+
+	if descTrimmed != "" || resTrimmed != "" {
+		detailBox := container.NewVBox()
+
+		if descTrimmed != "" {
+			detailBox.Add(RenderMarkdown(descTrimmed))
+		}
+
+		if resTrimmed != "" {
+			resHeading := widget.NewLabelWithStyle("✔ Resolution / Implementation Details:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+			resContent := RenderMarkdown(resTrimmed)
+
+			resBg := canvas.NewRectangle(theme.ButtonColor())
+			resBg.CornerRadius = 6
+
+			resBox := container.NewStack(resBg, container.NewPadded(container.NewVBox(resHeading, resContent)))
+			detailBox.Add(resBox)
+		}
+
+		mdContainer := container.NewPadded(detailBox)
 		mdContainer.Hide()
 
 		var toggleBtn *widget.Button
 		expanded := false
 
-		toggleBtn = widget.NewButtonWithIcon("Details", theme.MenuExpandIcon(), func() {
+		btnLabel := "Details"
+		if task.Done && resTrimmed != "" {
+			btnLabel = "Details & Resolution"
+		}
+
+		toggleBtn = widget.NewButtonWithIcon(btnLabel, theme.MenuExpandIcon(), func() {
 			expanded = !expanded
 			if expanded {
 				toggleBtn.SetIcon(theme.MenuDropUpIcon())
@@ -108,7 +131,7 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 				mdContainer.Show()
 			} else {
 				toggleBtn.SetIcon(theme.MenuExpandIcon())
-				toggleBtn.SetText("Details")
+				toggleBtn.SetText(btnLabel)
 				mdContainer.Hide()
 			}
 		})

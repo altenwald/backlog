@@ -11,12 +11,13 @@ import (
 )
 
 var (
-	addTitle string
-	addDesc  string
-	addGroup string
-	addSize  string
-	addTier  int
-	addTag   string
+	addTitle      string
+	addDesc       string
+	addGroup      string
+	addSize       string
+	addTier       int
+	addTag        string
+	addResolution string
 )
 
 var addCmd = &cobra.Command{
@@ -63,6 +64,7 @@ var addCmd = &cobra.Command{
 			Size:        size,
 			Tier:        tier,
 			Tag:         addTag,
+			Resolution:  addResolution,
 		})
 		if err != nil {
 			return err
@@ -82,5 +84,6 @@ func init() {
 	addCmd.Flags().StringVarP(&addSize, "size", "S", "M", "Effort size (XS, S, M, L, XL)")
 	addCmd.Flags().IntVarP(&addTier, "tier", "t", 3, "Priority Tier (1=Blocker, 2=Important, 3=Visual debt, 4=Internal, 5=Future)")
 	addCmd.Flags().StringVar(&addTag, "tag", "", "Tag or reference label")
+	addCmd.Flags().StringVarP(&addResolution, "resolution", "r", "", "Summary of implementation details or resolution")
 	RootCmd.AddCommand(addCmd)
 }

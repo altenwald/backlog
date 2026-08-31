@@ -85,6 +85,7 @@ type Task struct {
 	Tier        Tier       `json:"tier"`
 	Done        bool       `json:"done"`
 	DoneAt      *time.Time `json:"done_at,omitempty"`
+	Resolution  string     `json:"resolution,omitempty"` // Summary of implementation details and resolution
 	Tag         string     `json:"tag,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`

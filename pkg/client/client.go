@@ -195,8 +195,12 @@ func (c *Client) AddTask(projectSlug string, task model.Task) (*model.Task, erro
 	return &created, err
 }
 
-func (c *Client) CompleteTask(projectSlug, taskID string, done bool) (*model.Task, error) {
-	body, _ := json.Marshal(map[string]bool{"done": done})
+func (c *Client) CompleteTask(projectSlug, taskID string, done bool, resolution ...string) (*model.Task, error) {
+	reqBody := map[string]any{"done": done}
+	if len(resolution) > 0 && resolution[0] != "" {
+		reqBody["resolution"] = resolution[0]
+	}
+	body, _ := json.Marshal(reqBody)
 	u := fmt.Sprintf("%s/api/projects/%s/tasks/%s/done", c.baseURL, url.PathEscape(projectSlug), url.PathEscape(taskID))
 	resp, err := c.httpClient.Post(u, "application/json", bytes.NewReader(body))
 	if err != nil {

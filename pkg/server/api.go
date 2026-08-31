@@ -240,14 +240,19 @@ func (h *APIHandler) completeTask(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	var body struct {
-		Done *bool `json:"done"`
+		Done       *bool  `json:"done"`
+		Resolution string `json:"resolution"`
 	}
 	done := true
-	if err := json.NewDecoder(r.Body).Decode(&body); err == nil && body.Done != nil {
-		done = *body.Done
+	resolution := ""
+	if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+		if body.Done != nil {
+			done = *body.Done
+		}
+		resolution = body.Resolution
 	}
 
-	updated, err := h.store.CompleteTask(slug, id, done)
+	updated, err := h.store.CompleteTask(slug, id, done, resolution)
 	if err != nil {
 		errorResponse(w, http.StatusBadRequest, err.Error())
 		return

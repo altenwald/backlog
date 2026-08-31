@@ -204,6 +204,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithString("size", mcp.Description("Effort size: 'XS', 'S', 'M', 'L', 'XL' (default 'M')")),
 			mcp.WithNumber("tier", mcp.Description("Priority tier: 1 (Blocker) to 5 (Future). Default 3")),
 			mcp.WithString("tag", mcp.Description("Tag or reference label (e.g. 'TODO', 'spec 08-24')")),
+			mcp.WithString("resolution", mcp.Description("Summary of implementation details or resolution (optional)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			title, ok := req.Params.Arguments["title"].(string)
@@ -220,6 +221,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			group, _ := req.Params.Arguments["group"].(string)
 			sizeStr, _ := req.Params.Arguments["size"].(string)
 			tag, _ := req.Params.Arguments["tag"].(string)
+			resolution, _ := req.Params.Arguments["resolution"].(string)
 
 			tier := model.Tier3
 			if tierVal, ok := req.Params.Arguments["tier"].(float64); ok && tierVal >= 1 && tierVal <= 5 {
@@ -237,6 +239,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 				Size:        model.Size(strings.ToUpper(sizeStr)),
 				Tier:        tier,
 				Tag:         tag,
+				Resolution:  resolution,
 			})
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
@@ -252,10 +255,11 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 	s.AddTool(
 		mcp.NewTool(
 			"complete_task",
-			mcp.WithDescription("Mark a task as completed (or reopen as pending if done: false)."),
+			mcp.WithDescription("Mark a task as completed with optional implementation details / resolution summary (or reopen if done: false)."),
 			mcp.WithString("task_id", mcp.Description("Numeric ID of the task"), mcp.Required()),
 			mcp.WithString("project", mcp.Description("Project slug (optional)")),
 			mcp.WithBoolean("done", mcp.Description("Completed status: true (default) or false")),
+			mcp.WithString("resolution", mcp.Description("Summary of implementation details, architectural decisions, and resolution (Markdown supported)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			taskIDRaw := req.Params.Arguments["task_id"]
@@ -280,8 +284,9 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			if doneVal, ok := req.Params.Arguments["done"].(bool); ok {
 				done = doneVal
 			}
+			resolution, _ := req.Params.Arguments["resolution"].(string)
 
-			task, err := st.CompleteTask(project, taskID, done)
+			task, err := st.CompleteTask(project, taskID, done, resolution)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -291,8 +296,12 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			if !done {
 				statusStr = "marked as pending"
 			}
-			return mcp.NewToolResultText(fmt.Sprintf("✔ Task #%s %s in '%s': %s\nRemaining status: %d/%d open (%d pts)",
-				task.ID, statusStr, project, task.Title, sum.OpenTasks, sum.TotalTasks, sum.OpenPoints)), nil
+			resInfo := ""
+			if task.Resolution != "" {
+				resInfo = fmt.Sprintf("\nResolution: %s", task.Resolution)
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Task #%s %s in '%s': %s%s\nRemaining status: %d/%d open (%d pts)",
+				task.ID, statusStr, project, task.Title, resInfo, sum.OpenTasks, sum.TotalTasks, sum.OpenPoints)), nil
 		},
 	)
 
@@ -309,6 +318,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithString("size", mcp.Description("New effort size ('XS', 'S', 'M', 'L', 'XL')")),
 			mcp.WithNumber("tier", mcp.Description("New Tier (1..5)")),
 			mcp.WithString("tag", mcp.Description("New tag")),
+			mcp.WithString("resolution", mcp.Description("New resolution / implementation details summary")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			taskIDRaw := req.Params.Arguments["task_id"]
@@ -347,6 +357,9 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			}
 			if tagVal, ok := req.Params.Arguments["tag"].(string); ok {
 				update.Tag = tagVal
+			}
+			if resVal, ok := req.Params.Arguments["resolution"].(string); ok {
+				update.Resolution = resVal
 			}
 
 			task, err := st.UpdateTask(project, update)
