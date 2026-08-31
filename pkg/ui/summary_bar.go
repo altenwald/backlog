@@ -20,8 +20,8 @@ type SummaryBar struct {
 }
 
 func NewSummaryBar() *SummaryBar {
-	ptsLabel := widget.NewLabelWithStyle("0 pts", fyne.TextAlignLeading, fyne.TextStyle{Bold: true, Monospace: true})
-	statLabel := widget.NewLabelWithStyle("0 open · 0 completed", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	ptsLabel := widget.NewLabelWithStyle("0 open / 0 tasks", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	statLabel := widget.NewLabelWithStyle("0 open pts (0 total)", fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 	chipsRow := container.NewHBox()
 
 	// Theme-aware card background
@@ -50,8 +50,8 @@ func (sb *SummaryBar) Update(sum *model.Summary) {
 	if sum == nil {
 		return
 	}
-	sb.ptsLabel.SetText(fmt.Sprintf("%d points (%d open)", sum.TotalPoints, sum.OpenPoints))
-	sb.statLabel.SetText(fmt.Sprintf("%d open · %d completed", sum.OpenTasks, sum.CompletedTasks))
+	sb.ptsLabel.SetText(fmt.Sprintf("%d open / %d total tasks", sum.OpenTasks, sum.TotalTasks))
+	sb.statLabel.SetText(fmt.Sprintf("%d open pts (%d total pts)", sum.OpenPoints, sum.TotalPoints))
 
 	sb.chipsRow.Objects = nil
 	for _, size := range []model.Size{model.SizeXL, model.SizeL, model.SizeM, model.SizeS, model.SizeXS} {

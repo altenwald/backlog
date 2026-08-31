@@ -2,11 +2,11 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/altenwald/backlog/pkg/client"
 	"github.com/altenwald/backlog/pkg/model"
+	"github.com/altenwald/backlog/pkg/store"
 	"github.com/spf13/cobra"
 )
 
@@ -21,22 +21,6 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List tasks in the active project",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := client.NewClient(flagAPIURL)
-		if !c.IsServerRunning() {
-			fmt.Fprintln(os.Stderr, "⚠️  Backlog server does not appear to be running on "+flagAPIURL)
-			fmt.Fprintln(os.Stderr, "   Start it with 'backlog' or 'backlog start'")
-			return nil
-		}
-
-		proj := resolveProject(flagProject)
-		if proj == "" {
-			active, err := c.GetActiveProject()
-			if err != nil {
-				return err
-			}
-			proj = active.Slug
-		}
-
 		filter := model.TaskFilter{
 			Search: flagSearch,
 		}
@@ -55,12 +39,42 @@ var listCmd = &cobra.Command{
 			filter.Done = &d
 		}
 
-		tasks, err := c.ListTasks(proj, filter)
-		if err != nil {
-			return err
+		c := client.NewClient(flagAPIURL)
+		var tasks []model.Task
+		var sum *model.Summary
+		var proj string
+		var err error
+
+		if c.IsServerRunning() {
+			proj = resolveProject(flagProject)
+			if proj == "" {
+				active, err := c.GetActiveProject()
+				if err != nil {
+					return err
+				}
+				proj = active.Slug
+			}
+			tasks, err = c.ListTasks(proj, filter)
+			if err != nil {
+				return err
+			}
+			sum, _ = c.GetSummary(proj)
+		} else {
+			st, err := store.NewStore(flagDataDir)
+			if err != nil {
+				return err
+			}
+			proj = resolveProject(flagProject)
+			if proj == "" {
+				proj = st.GetActiveProjectSlug()
+			}
+			tasks, err = st.ListTasks(proj, filter)
+			if err != nil {
+				return err
+			}
+			sum, _ = st.GetSummary(proj)
 		}
 
-		sum, _ := c.GetSummary(proj)
 		fmt.Printf("📂 Project: %s (%d/%d open · %d points)\n", strings.ToUpper(proj), sum.OpenTasks, sum.TotalTasks, sum.OpenPoints)
 		fmt.Println(strings.Repeat("─", 72))
 

@@ -11,6 +11,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/systray"
 	"github.com/altenwald/backlog/pkg/store"
 )
@@ -26,14 +27,16 @@ type TrayManager struct {
 
 func NewTrayManager(app fyne.App, window fyne.Window, st *store.Store, onAddClick func()) *TrayManager {
 	rawPNG := createBacklogLineLogo(32)
-	res := fyne.NewStaticResource("backlog_tray.png", rawPNG)
+	baseRes := fyne.NewStaticResource("backlog_tray.png", rawPNG)
+	// Use ThemedResource so Fyne sets it as macOS template icon on initial load
+	themedRes := theme.NewThemedResource(baseRes)
 
 	tm := &TrayManager{
 		app:        app,
 		window:     window,
 		store:      st,
 		iconBytes:  rawPNG,
-		iconRes:    res,
+		iconRes:    themedRes,
 		onAddClick: onAddClick,
 	}
 
@@ -52,6 +55,11 @@ func (tm *TrayManager) Refresh() {
 	}
 
 	activeSlug := tm.store.GetActiveProjectSlug()
+	if activeSlug == "" {
+		activeSlug = "dymmer"
+		_ = tm.store.SetActiveProject("dymmer")
+	}
+
 	activeProject, err := tm.store.GetProject(activeSlug)
 	if err != nil || activeProject == nil {
 		return

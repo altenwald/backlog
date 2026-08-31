@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
@@ -73,7 +74,7 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	})
 	check.Checked = task.Done
 
-	// Badges column
+	// Badges column (fixed width)
 	sizeBadge := MakeBadge(string(task.Size), SizeColor(task.Size), color.White)
 	tierBadge := MakeBadge(task.Tier.ShortLabel(), TierColor(task.Tier), color.White)
 	badgesCol := container.NewVBox(sizeBadge, tierBadge)
@@ -116,11 +117,14 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	})
 	deleteBtn.Importance = widget.DangerImportance
 
-	rightCol := container.NewVBox(tagLabel, container.NewHBox(editBtn, deleteBtn))
+	// Ensure buttons and tags are always flushed completely to the right edge
+	tagRow := container.NewHBox(layout.NewSpacer(), tagLabel)
+	btnRow := container.NewHBox(layout.NewSpacer(), editBtn, deleteBtn)
+	rightCol := container.NewVBox(tagRow, btnRow)
 
 	rowContent := container.NewBorder(nil, nil, container.NewHBox(check, badgesCol), rightCol, textCol)
 
-	// Use theme-aware background color for clean light and dark mode rendering
+	// Theme-aware background
 	cardBg := canvas.NewRectangle(theme.InputBackgroundColor())
 	cardBg.CornerRadius = 8
 

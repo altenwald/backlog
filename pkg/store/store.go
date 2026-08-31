@@ -68,15 +68,19 @@ func NewStore(dataDir string) (*Store, error) {
 		return nil, err
 	}
 
-	// If no projects exist, initialize default seed (Dymmer & Conta)
-	if len(s.projects) == 0 {
+	// If no projects exist or dymmer has partial seed, initialize full default seed (Dymmer & Conta)
+	if len(s.projects) == 0 || (s.projects["dymmer"] != nil && len(s.projects["dymmer"].Tasks) < 50) {
 		seeds := model.DefaultSeedProjects()
 		for _, p := range seeds {
-			s.projects[p.Slug] = p
-			_ = s.saveProject(p)
+			if s.projects[p.Slug] == nil || len(s.projects[p.Slug].Tasks) < len(p.Tasks) {
+				s.projects[p.Slug] = p
+				_ = s.saveProject(p)
+			}
 		}
-		s.config.ActiveProject = "dymmer"
-		_ = s.saveConfig()
+		if s.config.ActiveProject == "" {
+			s.config.ActiveProject = "dymmer"
+			_ = s.saveConfig()
+		}
 	}
 
 	return s, nil

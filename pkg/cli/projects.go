@@ -2,10 +2,10 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/altenwald/backlog/pkg/client"
+	"github.com/altenwald/backlog/pkg/store"
 	"github.com/spf13/cobra"
 )
 
@@ -14,34 +14,55 @@ var projectsCmd = &cobra.Command{
 	Short: "List all projects and their status",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := client.NewClient(flagAPIURL)
-		if !c.IsServerRunning() {
-			fmt.Fprintln(os.Stderr, "⚠️  Backlog server does not appear to be running on "+flagAPIURL)
-			return nil
-		}
-
-		projects, err := c.ListProjects()
-		if err != nil {
-			return err
-		}
-
 		fmt.Println("📂 Registered Projects in Backlog:")
 		fmt.Println(strings.Repeat("─", 60))
-		for _, p := range projects {
-			activeIndicator := "  "
-			if p.Active {
-				activeIndicator = "● "
+
+		if c.IsServerRunning() {
+			projects, err := c.ListProjects()
+			if err != nil {
+				return err
 			}
-			open := 0
-			total := 0
-			pts := 0
-			if p.Summary != nil {
-				open = p.Summary.OpenTasks
-				total = p.Summary.TotalTasks
-				pts = p.Summary.OpenPoints
+			for _, p := range projects {
+				activeIndicator := "  "
+				if p.Active {
+					activeIndicator = "● "
+				}
+				open := 0
+				total := 0
+				pts := 0
+				if p.Summary != nil {
+					open = p.Summary.OpenTasks
+					total = p.Summary.TotalTasks
+					pts = p.Summary.OpenPoints
+				}
+				fmt.Printf("%s%-12s (%-15s) %3d/%-3d open  (%3d open pts)\n",
+					activeIndicator, p.Slug, p.Name, open, total, pts)
 			}
-			fmt.Printf("%s%-12s (%-15s) %3d/%-3d open  (%3d open pts)\n",
-				activeIndicator, p.Slug, p.Name, open, total, pts)
+		} else {
+			st, err := store.NewStore(flagDataDir)
+			if err != nil {
+				return err
+			}
+			activeSlug := st.GetActiveProjectSlug()
+			for _, p := range st.ListProjects() {
+				activeIndicator := "  "
+				if p.Slug == activeSlug {
+					activeIndicator = "● "
+				}
+				sum, _ := st.GetSummary(p.Slug)
+				open := 0
+				total := 0
+				pts := 0
+				if sum != nil {
+					open = sum.OpenTasks
+					total = sum.TotalTasks
+					pts = sum.OpenPoints
+				}
+				fmt.Printf("%s%-12s (%-15s) %3d/%-3d open  (%3d open pts)\n",
+					activeIndicator, p.Slug, p.Name, open, total, pts)
+			}
 		}
+
 		return nil
 	},
 }
@@ -58,13 +79,18 @@ var projectUseCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		slug := strings.ToLower(args[0])
 		c := client.NewClient(flagAPIURL)
-		if !c.IsServerRunning() {
-			fmt.Fprintln(os.Stderr, "⚠️  Backlog server does not appear to be running on "+flagAPIURL)
-			return nil
-		}
-
-		if err := c.SetActiveProject(slug); err != nil {
-			return err
+		if c.IsServerRunning() {
+			if err := c.SetActiveProject(slug); err != nil {
+				return err
+			}
+		} else {
+			st, err := store.NewStore(flagDataDir)
+			if err != nil {
+				return err
+			}
+			if err := st.SetActiveProject(slug); err != nil {
+				return err
+			}
 		}
 		fmt.Printf("✔ Active project switched to: %s\n", slug)
 		return nil
@@ -82,21 +108,28 @@ var projectNewCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		slug := strings.ToLower(args[0])
-		c := client.NewClient(flagAPIURL)
-		if !c.IsServerRunning() {
-			fmt.Fprintln(os.Stderr, "⚠️  Backlog server does not appear to be running on "+flagAPIURL)
-			return nil
-		}
-
 		if newProjName == "" {
 			newProjName = strings.Title(slug)
 		}
 
-		p, err := c.CreateProject(slug, newProjName, newProjDesc)
-		if err != nil {
-			return err
+		c := client.NewClient(flagAPIURL)
+		if c.IsServerRunning() {
+			p, err := c.CreateProject(slug, newProjName, newProjDesc)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✔ Project '%s' (%s) created successfully.\n", p.Slug, p.Name)
+		} else {
+			st, err := store.NewStore(flagDataDir)
+			if err != nil {
+				return err
+			}
+			p, err := st.CreateProject(slug, newProjName, newProjDesc)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("✔ Project '%s' (%s) created successfully.\n", p.Slug, p.Name)
 		}
-		fmt.Printf("✔ Project '%s' (%s) created successfully.\n", p.Slug, p.Name)
 		return nil
 	},
 }

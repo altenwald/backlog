@@ -2,11 +2,11 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/altenwald/backlog/pkg/client"
 	"github.com/altenwald/backlog/pkg/model"
+	"github.com/altenwald/backlog/pkg/store"
 	"github.com/spf13/cobra"
 )
 
@@ -15,23 +15,35 @@ var summaryCmd = &cobra.Command{
 	Short: "Display metric summary and point breakdown for the active project",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := client.NewClient(flagAPIURL)
-		if !c.IsServerRunning() {
-			fmt.Fprintln(os.Stderr, "⚠️  Backlog server does not appear to be running on "+flagAPIURL)
-			return nil
-		}
+		var sum *model.Summary
+		var err error
 
-		proj := resolveProject(flagProject)
-		if proj == "" {
-			active, err := c.GetActiveProject()
+		if c.IsServerRunning() {
+			proj := resolveProject(flagProject)
+			if proj == "" {
+				active, err := c.GetActiveProject()
+				if err != nil {
+					return err
+				}
+				proj = active.Slug
+			}
+			sum, err = c.GetSummary(proj)
 			if err != nil {
 				return err
 			}
-			proj = active.Slug
-		}
-
-		sum, err := c.GetSummary(proj)
-		if err != nil {
-			return err
+		} else {
+			st, err := store.NewStore(flagDataDir)
+			if err != nil {
+				return err
+			}
+			proj := resolveProject(flagProject)
+			if proj == "" {
+				proj = st.GetActiveProjectSlug()
+			}
+			sum, err = st.GetSummary(proj)
+			if err != nil {
+				return err
+			}
 		}
 
 		fmt.Printf("📊 Backlog Summary: %s\n", strings.ToUpper(sum.ProjectName))
