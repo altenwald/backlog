@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -79,7 +80,7 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	tierBadge := MakeBadge(task.Tier.ShortLabel(), TierColor(task.Tier), color.White)
 	badgesCol := container.NewVBox(sizeBadge, tierBadge)
 
-	// Title & Description
+	// Title
 	titleText := task.Title
 	if task.Done {
 		titleText = "✓ " + titleText
@@ -87,9 +88,21 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	title := widget.NewLabelWithStyle(titleText, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	title.Wrapping = fyne.TextWrapWord
 
-	desc := widget.NewLabel(task.Description)
-	desc.Wrapping = fyne.TextWrapWord
-	desc.TextStyle = fyne.TextStyle{Italic: task.Done}
+	textCol := container.NewVBox(title)
+
+	// Collapsible Markdown Description Accordion
+	descTrimmed := strings.TrimSpace(task.Description)
+	if descTrimmed != "" {
+		richText := widget.NewRichTextFromMarkdown(descTrimmed)
+		richText.Wrapping = fyne.TextWrapWord
+
+		accItem := widget.NewAccordionItem("Details", richText)
+		accItem.Open = false
+		acc := widget.NewAccordion(accItem)
+		acc.MultiOpen = true
+
+		textCol.Add(acc)
+	}
 
 	tagText := ""
 	if task.Group != "" {
@@ -99,8 +112,6 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 		tagText = tagText + " " + task.Tag
 	}
 	tagLabel := widget.NewLabelWithStyle(tagText, fyne.TextAlignTrailing, fyne.TextStyle{Monospace: true})
-
-	textCol := container.NewVBox(title, desc)
 
 	// Action buttons
 	editBtn := widget.NewButtonWithIcon("", theme.DocumentCreateIcon(), func() {
