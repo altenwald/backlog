@@ -7,9 +7,11 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
+	"math"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/systray"
 	"github.com/altenwald/backlog/pkg/store"
 )
 
@@ -17,16 +19,21 @@ type TrayManager struct {
 	app        fyne.App
 	window     fyne.Window
 	store      *store.Store
+	iconBytes  []byte
 	iconRes    fyne.Resource
 	onAddClick func()
 }
 
 func NewTrayManager(app fyne.App, window fyne.Window, st *store.Store, onAddClick func()) *TrayManager {
+	rawPNG := createBacklogLineLogo(32)
+	res := fyne.NewStaticResource("backlog_tray.png", rawPNG)
+
 	tm := &TrayManager{
 		app:        app,
 		window:     window,
 		store:      st,
-		iconRes:    createDefaultTrayIcon(),
+		iconBytes:  rawPNG,
+		iconRes:    res,
 		onAddClick: onAddClick,
 	}
 
@@ -58,14 +65,19 @@ func (tm *TrayManager) Refresh() {
 		totalCount = summary.TotalTasks
 	}
 
-	// Status Header Item
+	// Update Menu bar title and template icon
+	systray.SetTemplateIcon(tm.iconBytes, tm.iconBytes)
+	systray.SetTitle(fmt.Sprintf(" %s %d/%d", activeProject.Name, openCount, totalCount))
+	systray.SetTooltip(fmt.Sprintf("Backlog — [%s] %d/%d pending tasks", activeProject.Name, openCount, totalCount))
+
+	// Status Header Item in Dropdown
 	statusTitle := fmt.Sprintf("[%s] %d/%d Pending", activeProject.Name, openCount, totalCount)
 	statusItem := fyne.NewMenuItem(statusTitle, func() {
 		tm.window.Show()
 		tm.window.RequestFocus()
 	})
 
-	// Top 5 Prioritarias
+	// Top 5 Priorities
 	topTasks, _ := tm.store.GetTopPriorities(activeSlug, 5)
 	var topMenuItems []*fyne.MenuItem
 	if len(topTasks) == 0 {
@@ -117,9 +129,11 @@ func (tm *TrayManager) Refresh() {
 		tm.window.RequestFocus()
 	})
 
-	quitItem := fyne.NewMenuItem("Quit", func() {
+	// Set IsQuit to true to avoid duplicate localized system quit item
+	quitItem := fyne.NewMenuItem("Quit Backlog", func() {
 		tm.app.Quit()
 	})
+	quitItem.IsQuit = true
 
 	menuItems := []*fyne.MenuItem{
 		statusItem,
@@ -139,35 +153,100 @@ func (tm *TrayManager) Refresh() {
 	desk.SetSystemTrayMenu(menu)
 }
 
-func createDefaultTrayIcon() fyne.Resource {
-	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
-	// Draw background circle
-	blue := color.NRGBA{R: 59, G: 125, B: 212, A: 255}
-	white := color.NRGBA{R: 255, G: 255, B: 255, A: 255}
-
+// createBacklogLineLogo generates a wireframe line-art icon:
+// A stroke box outline with an empty center and a checkmark that extends past the top-right corner.
+func createBacklogLineLogo(dim int) []byte {
+	if dim <= 0 {
+		dim = 32
+	}
+	img := image.NewRGBA(image.Rect(0, 0, dim, dim))
 	draw.Draw(img, img.Bounds(), &image.Uniform{C: color.Transparent}, image.Point{}, draw.Src)
 
-	// Simple crisp checkmark icon
-	for x := 4; x < 28; x++ {
-		for y := 4; y < 28; y++ {
-			dx := x - 16
-			dy := y - 16
-			if dx*dx+dy*dy <= 144 {
-				img.Set(x, y, blue)
-			}
-		}
-	}
-	// Checkmark dots
-	for i := 0; i < 4; i++ {
-		img.Set(10+i, 16+i, white)
-		img.Set(10+i, 17+i, white)
-	}
-	for i := 0; i < 8; i++ {
-		img.Set(14+i, 20-i, white)
-		img.Set(14+i, 21-i, white)
-	}
+	// Scale factor relative to 32x32 base
+	scale := float64(dim) / 32.0
+	black := color.RGBA{R: 0, G: 0, B: 0, A: 255}
+
+	boxStroke := 2.2 * scale
+	checkStroke := 2.6 * scale
+
+	// 1. Box outline (hollow wireframe)
+	// Left side
+	drawLine(img, 6.0*scale, 9.0*scale, 6.0*scale, 26.0*scale, boxStroke, black)
+	// Bottom side
+	drawLine(img, 6.0*scale, 26.0*scale, 23.0*scale, 26.0*scale, boxStroke, black)
+	// Right side (ends before checkmark)
+	drawLine(img, 23.0*scale, 26.0*scale, 23.0*scale, 14.0*scale, boxStroke, black)
+	// Top side (ends before checkmark)
+	drawLine(img, 6.0*scale, 9.0*scale, 15.0*scale, 9.0*scale, boxStroke, black)
+
+	// 2. Checkmark extending outside the top-right corner of the box
+	// Short branch
+	drawLine(img, 8.5*scale, 17.5*scale, 13.5*scale, 22.5*scale, checkStroke, black)
+	// Long branch (crosses the box and extends to (27.5, 5.5))
+	drawLine(img, 13.5*scale, 22.5*scale, 27.5*scale, 5.5*scale, checkStroke, black)
 
 	var buf bytes.Buffer
 	_ = png.Encode(&buf, img)
-	return fyne.NewStaticResource("tray.png", buf.Bytes())
+	return buf.Bytes()
+}
+
+func drawLine(img *image.RGBA, x0, y0, x1, y1 float64, width float64, c color.RGBA) {
+	minX := int(math.Floor(math.Min(x0, x1) - width - 1))
+	maxX := int(math.Ceil(math.Max(x0, x1) + width + 1))
+	minY := int(math.Floor(math.Min(y0, y1) - width - 1))
+	maxY := int(math.Ceil(math.Max(y0, y1) + width + 1))
+
+	b := img.Bounds()
+	if minX < b.Min.X {
+		minX = b.Min.X
+	}
+	if minY < b.Min.Y {
+		minY = b.Min.Y
+	}
+	if maxX > b.Max.X {
+		maxX = b.Max.X
+	}
+	if maxY > b.Max.Y {
+		maxY = b.Max.Y
+	}
+
+	dx := x1 - x0
+	dy := y1 - y0
+	lenSq := dx*dx + dy*dy
+	halfW := width / 2.0
+
+	for y := minY; y < maxY; y++ {
+		for x := minX; x < maxX; x++ {
+			px := float64(x) + 0.5
+			py := float64(y) + 0.5
+
+			var t float64
+			if lenSq > 0 {
+				t = ((px-x0)*dx + (py-y0)*dy) / lenSq
+				if t < 0 {
+					t = 0
+				}
+				if t > 1 {
+					t = 1
+				}
+			}
+
+			projX := x0 + t*dx
+			projY := y0 + t*dy
+			dist := math.Sqrt((px-projX)*(px-projX) + (py-projY)*(py-projY))
+
+			if dist <= halfW {
+				img.SetRGBA(x, y, c)
+			} else if dist < halfW+1.0 {
+				alphaRatio := 1.0 - (dist - halfW)
+				if alphaRatio > 0 {
+					targetAlpha := uint8(float64(c.A) * alphaRatio)
+					orig := img.RGBAAt(x, y)
+					if targetAlpha > orig.A {
+						img.SetRGBA(x, y, color.RGBA{R: c.R, G: c.G, B: c.B, A: targetAlpha})
+					}
+				}
+			}
+		}
+	}
 }

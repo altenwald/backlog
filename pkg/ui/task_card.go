@@ -6,41 +6,42 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
 )
 
-// Tier colors
+// Tier colors - calibrated for high contrast in both dark & light themes
 func TierColor(t model.Tier) color.Color {
 	switch t {
 	case model.Tier1:
-		return color.NRGBA{R: 218, G: 68, B: 54, A: 255} // Red
+		return color.NRGBA{R: 225, G: 65, B: 55, A: 255} // Blocker Red
 	case model.Tier2:
-		return color.NRGBA{R: 217, G: 140, B: 30, A: 255} // Orange/Gold
+		return color.NRGBA{R: 225, G: 140, B: 25, A: 255} // Important Orange
 	case model.Tier3:
-		return color.NRGBA{R: 31, G: 122, B: 140, A: 255} // Cyan/Teal
+		return color.NRGBA{R: 20, G: 145, B: 155, A: 255} // Visual Teal
 	case model.Tier4:
-		return color.NRGBA{R: 110, G: 110, B: 150, A: 255} // Purple/Slate
+		return color.NRGBA{R: 120, G: 115, B: 165, A: 255} // Internal Slate
 	case model.Tier5:
-		return color.NRGBA{R: 139, G: 150, B: 168, A: 255} // Gray
+		return color.NRGBA{R: 125, G: 135, B: 145, A: 255} // Future Gray
 	default:
-		return color.NRGBA{R: 100, G: 100, B: 100, A: 255}
+		return color.NRGBA{R: 110, G: 110, B: 110, A: 255}
 	}
 }
 
-// Size colors
+// Size colors - calibrated for readability
 func SizeColor(s model.Size) color.Color {
 	switch s {
 	case model.SizeXS:
-		return color.NRGBA{R: 70, G: 130, B: 200, A: 255}
+		return color.NRGBA{R: 60, G: 130, B: 215, A: 255}
 	case model.SizeS:
-		return color.NRGBA{R: 50, G: 110, B: 180, A: 255}
+		return color.NRGBA{R: 45, G: 110, B: 195, A: 255}
 	case model.SizeM:
-		return color.NRGBA{R: 59, G: 125, B: 212, A: 255}
+		return color.NRGBA{R: 35, G: 95, B: 180, A: 255}
 	case model.SizeL:
-		return color.NRGBA{R: 35, G: 80, B: 150, A: 255}
+		return color.NRGBA{R: 25, G: 75, B: 160, A: 255}
 	case model.SizeXL:
-		return color.NRGBA{R: 20, G: 40, B: 80, A: 255}
+		return color.NRGBA{R: 15, G: 55, B: 140, A: 255}
 	default:
 		return color.NRGBA{R: 80, G: 80, B: 80, A: 255}
 	}
@@ -77,7 +78,7 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	tierBadge := MakeBadge(task.Tier.ShortLabel(), TierColor(task.Tier), color.White)
 	badgesCol := container.NewVBox(sizeBadge, tierBadge)
 
-	// Title & Desc
+	// Title & Description
 	titleText := task.Title
 	if task.Done {
 		titleText = "✓ " + titleText
@@ -101,14 +102,14 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	textCol := container.NewVBox(title, desc)
 
 	// Action buttons
-	editBtn := widget.NewButtonWithIcon("", nil, func() {
+	editBtn := widget.NewButtonWithIcon("", theme.DocumentCreateIcon(), func() {
 		if callbacks.OnEdit != nil {
 			callbacks.OnEdit(task)
 		}
 	})
 	editBtn.Importance = widget.LowImportance
 
-	deleteBtn := widget.NewButton("✕", func() {
+	deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
 		if callbacks.OnDelete != nil {
 			callbacks.OnDelete(task.ID)
 		}
@@ -119,10 +120,8 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 
 	rowContent := container.NewBorder(nil, nil, container.NewHBox(check, badgesCol), rightCol, textCol)
 
-	cardBg := canvas.NewRectangle(color.NRGBA{R: 245, G: 248, B: 252, A: 255})
-	if task.Done {
-		cardBg.FillColor = color.NRGBA{R: 235, G: 238, B: 242, A: 160}
-	}
+	// Use theme-aware background color for clean light and dark mode rendering
+	cardBg := canvas.NewRectangle(theme.InputBackgroundColor())
 	cardBg.CornerRadius = 8
 
 	return container.NewStack(cardBg, container.NewPadded(rowContent))

@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
 )
@@ -23,7 +24,8 @@ func NewSummaryBar() *SummaryBar {
 	statLabel := widget.NewLabelWithStyle("0 open · 0 completed", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	chipsRow := container.NewHBox()
 
-	bg := canvas.NewRectangle(color.NRGBA{R: 240, G: 244, B: 250, A: 255})
+	// Theme-aware card background
+	bg := canvas.NewRectangle(theme.InputBackgroundColor())
 	bg.CornerRadius = 8
 
 	content := container.NewHBox(
