@@ -27,7 +27,7 @@ type BacklogApp struct {
 func NewBacklogApp(st *store.Store) *BacklogApp {
 	a := app.NewWithID("com.altenwald.backlog")
 	w := a.NewWindow("Backlog")
-	w.Resize(fyne.NewSize(920, 720))
+	w.Resize(fyne.NewSize(980, 750))
 
 	bApp := &BacklogApp{
 		fyneApp: a,
@@ -102,7 +102,7 @@ func (ba *BacklogApp) buildUI() {
 	)
 
 	content := container.NewBorder(topSection, nil, nil, nil, scroll)
-	ba.window.SetContent(content)
+	ba.window.SetContent(container.NewPadded(content))
 
 	// Setup Tray
 	ba.tray = NewTrayManager(ba.fyneApp, ba.window, ba.store, func() {

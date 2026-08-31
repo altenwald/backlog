@@ -24,7 +24,7 @@ func NewFilterBar(onFilterChange func(filter model.TaskFilter)) *FilterBar {
 	}
 
 	fb.searchEntry = widget.NewEntry()
-	fb.searchEntry.SetPlaceHolder("Search tasks...")
+	fb.searchEntry.SetPlaceHolder("🔍 Search tasks...")
 	fb.searchEntry.OnChanged = func(s string) {
 		fb.currentSearch = s
 		fb.emit()
@@ -78,7 +78,9 @@ func NewFilterBar(onFilterChange func(filter model.TaskFilter)) *FilterBar {
 		btnAll, btnT1, btnT2, btnT3, btnT4, btnT5,
 	)
 
-	topBar := container.NewBorder(nil, nil, nil, fb.searchEntry, tierRow)
+	// Sized search box with generous width
+	searchBox := container.NewGridWrap(fyne.NewSize(240, 36), fb.searchEntry)
+	topBar := container.NewBorder(nil, nil, nil, searchBox, tierRow)
 	fb.container = container.NewVBox(topBar)
 
 	return fb
