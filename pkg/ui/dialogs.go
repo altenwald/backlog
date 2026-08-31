@@ -15,7 +15,9 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 	titleEntry.SetPlaceHolder("Task title...")
 
 	descEntry := widget.NewMultiLineEntry()
-	descEntry.SetPlaceHolder("Details and context...")
+	descEntry.Wrapping = fyne.TextWrapWord
+	descEntry.SetMinRowsVisible(8)
+	descEntry.SetPlaceHolder("Details and context (Markdown supported)...")
 
 	groupEntry := widget.NewEntry()
 	groupEntry.SetPlaceHolder("e.g. Monetization, Domains, Bugs...")
@@ -70,7 +72,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 		}
 	}, parent)
 
-	d.Resize(fyne.NewSize(580, 480))
+	d.Resize(fyne.NewSize(680, 560))
 	d.Show()
 }
 
@@ -79,6 +81,8 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 	titleEntry.SetText(task.Title)
 
 	descEntry := widget.NewMultiLineEntry()
+	descEntry.Wrapping = fyne.TextWrapWord
+	descEntry.SetMinRowsVisible(8)
 	descEntry.SetText(task.Description)
 
 	groupEntry := widget.NewEntry()
@@ -138,7 +142,7 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 		}
 	}, parent)
 
-	d.Resize(fyne.NewSize(580, 480))
+	d.Resize(fyne.NewSize(680, 560))
 	d.Show()
 }
 
@@ -150,6 +154,8 @@ func ShowNewProjectDialog(parent fyne.Window, onSave func(slug, name, desc strin
 	nameEntry.SetPlaceHolder("Display Name (e.g. Dymmer, Conta)")
 
 	descEntry := widget.NewMultiLineEntry()
+	descEntry.Wrapping = fyne.TextWrapWord
+	descEntry.SetMinRowsVisible(4)
 	descEntry.SetPlaceHolder("Project description...")
 
 	items := []*widget.FormItem{
@@ -174,6 +180,6 @@ func ShowNewProjectDialog(parent fyne.Window, onSave func(slug, name, desc strin
 		}
 	}, parent)
 
-	d.Resize(fyne.NewSize(540, 360))
+	d.Resize(fyne.NewSize(580, 420))
 	d.Show()
 }
