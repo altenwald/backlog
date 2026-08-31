@@ -8,6 +8,7 @@ import (
 	"image/draw"
 	"image/png"
 	"math"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/desktop"
@@ -45,6 +46,15 @@ func NewTrayManager(app fyne.App, window fyne.Window, st *store.Store, onAddClic
 	}
 
 	tm.Refresh()
+
+	// Ensure title and template icon are synced as soon as native macOS Cocoa event loop initializes
+	go func() {
+		for _, delay := range []time.Duration{50 * time.Millisecond, 150 * time.Millisecond, 300 * time.Millisecond, 600 * time.Millisecond, 1000 * time.Millisecond} {
+			time.Sleep(delay)
+			tm.Refresh()
+		}
+	}()
+
 	return tm
 }
 
