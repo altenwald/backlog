@@ -44,7 +44,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 		widget.NewFormItem("Tag / Reference", tagEntry),
 	}
 
-	dialog.ShowForm("Add Task to "+projectSlug, "Save", "Cancel", items, func(confirmed bool) {
+	d := dialog.NewForm("Add Task to "+projectSlug, "Save", "Cancel", items, func(confirmed bool) {
 		if !confirmed || strings.TrimSpace(titleEntry.Text) == "" {
 			return
 		}
@@ -69,6 +69,9 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 			onSave(task)
 		}
 	}, parent)
+
+	d.Resize(fyne.NewSize(580, 480))
+	d.Show()
 }
 
 func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task model.Task)) {
@@ -110,7 +113,7 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 		widget.NewFormItem("Tag / Reference", tagEntry),
 	}
 
-	dialog.ShowForm("Edit Task #"+task.ID, "Save", "Cancel", items, func(confirmed bool) {
+	d := dialog.NewForm("Edit Task #"+task.ID, "Save", "Cancel", items, func(confirmed bool) {
 		if !confirmed || strings.TrimSpace(titleEntry.Text) == "" {
 			return
 		}
@@ -134,6 +137,9 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 			onSave(updated)
 		}
 	}, parent)
+
+	d.Resize(fyne.NewSize(580, 480))
+	d.Show()
 }
 
 func ShowNewProjectDialog(parent fyne.Window, onSave func(slug, name, desc string)) {
@@ -152,7 +158,7 @@ func ShowNewProjectDialog(parent fyne.Window, onSave func(slug, name, desc strin
 		widget.NewFormItem("Description", descEntry),
 	}
 
-	dialog.ShowForm("Create New Project", "Create", "Cancel", items, func(confirmed bool) {
+	d := dialog.NewForm("Create New Project", "Create", "Cancel", items, func(confirmed bool) {
 		if !confirmed || strings.TrimSpace(slugEntry.Text) == "" {
 			return
 		}
@@ -167,4 +173,7 @@ func ShowNewProjectDialog(parent fyne.Window, onSave func(slug, name, desc strin
 			onSave(slug, name, desc)
 		}
 	}, parent)
+
+	d.Resize(fyne.NewSize(540, 360))
+	d.Show()
 }
