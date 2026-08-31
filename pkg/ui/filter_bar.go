@@ -101,12 +101,12 @@ func (fb *FilterBar) UpdateCounts(sum *model.Summary) {
 	if sum == nil {
 		return
 	}
-	fb.buttons[0].SetText(fmt.Sprintf("All (%d)", sum.TotalTasks))
-	fb.buttons[1].SetText(fmt.Sprintf("T1 (%d)", sum.TierCounts[model.Tier1]))
-	fb.buttons[2].SetText(fmt.Sprintf("T2 (%d)", sum.TierCounts[model.Tier2]))
-	fb.buttons[3].SetText(fmt.Sprintf("T3 (%d)", sum.TierCounts[model.Tier3]))
-	fb.buttons[4].SetText(fmt.Sprintf("T4 (%d)", sum.TierCounts[model.Tier4]))
-	fb.buttons[5].SetText(fmt.Sprintf("T5 (%d)", sum.TierCounts[model.Tier5]))
+	fb.buttons[0].SetText(fmt.Sprintf("All (%d/%d)", sum.OpenTasks, sum.TotalTasks))
+	fb.buttons[1].SetText(fmt.Sprintf("T1 (%d/%d)", sum.TierCounts[model.Tier1], sum.TotalTierCounts[model.Tier1]))
+	fb.buttons[2].SetText(fmt.Sprintf("T2 (%d/%d)", sum.TierCounts[model.Tier2], sum.TotalTierCounts[model.Tier2]))
+	fb.buttons[3].SetText(fmt.Sprintf("T3 (%d/%d)", sum.TierCounts[model.Tier3], sum.TotalTierCounts[model.Tier3]))
+	fb.buttons[4].SetText(fmt.Sprintf("T4 (%d/%d)", sum.TierCounts[model.Tier4], sum.TotalTierCounts[model.Tier4]))
+	fb.buttons[5].SetText(fmt.Sprintf("T5 (%d/%d)", sum.TierCounts[model.Tier5], sum.TotalTierCounts[model.Tier5]))
 }
 
 func (fb *FilterBar) emit() {

@@ -55,9 +55,10 @@ func (sb *SummaryBar) Update(sum *model.Summary) {
 
 	sb.chipsRow.Objects = nil
 	for _, size := range []model.Size{model.SizeXL, model.SizeL, model.SizeM, model.SizeS, model.SizeXS} {
-		count := sum.SizeCounts[size]
-		if count > 0 {
-			badge := MakeBadge(fmt.Sprintf("%d %s", count, size), SizeColor(size), color.White)
+		total := sum.SizeCounts[size]
+		open := sum.OpenSizeCounts[size]
+		if total > 0 {
+			badge := MakeBadge(fmt.Sprintf("%d/%d %s", open, total, size), SizeColor(size), color.White)
 			sb.chipsRow.Add(badge)
 		}
 	}

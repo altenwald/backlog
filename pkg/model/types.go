@@ -107,14 +107,16 @@ type TaskFilter struct {
 }
 
 type Summary struct {
-	ProjectSlug    string       `json:"project_slug"`
-	ProjectName    string       `json:"project_name"`
-	TotalTasks     int          `json:"total_tasks"`
-	OpenTasks      int          `json:"open_tasks"`
-	CompletedTasks int          `json:"completed_tasks"`
-	TotalPoints    int          `json:"total_points"`
-	OpenPoints     int          `json:"open_points"`
-	SizeCounts     map[Size]int `json:"size_counts"`
-	TierCounts     map[Tier]int `json:"tier_counts"`
-	Groups         []string     `json:"groups"`
+	ProjectSlug     string       `json:"project_slug"`
+	ProjectName     string       `json:"project_name"`
+	TotalTasks      int          `json:"total_tasks"`
+	OpenTasks       int          `json:"open_tasks"`
+	CompletedTasks  int          `json:"completed_tasks"`
+	TotalPoints     int          `json:"total_points"`
+	OpenPoints      int          `json:"open_points"`
+	SizeCounts      map[Size]int `json:"size_counts"`       // Total tasks by size
+	OpenSizeCounts  map[Size]int `json:"open_size_counts"`  // Open tasks by size
+	TierCounts      map[Tier]int `json:"tier_counts"`       // Open tasks by tier
+	TotalTierCounts map[Tier]int `json:"total_tier_counts"` // Total tasks by tier
+	Groups          []string     `json:"groups"`
 }

@@ -53,16 +53,16 @@ var summaryCmd = &cobra.Command{
 		fmt.Printf("  • Pending Points:       %d pts / %d pts total\n",
 			sum.OpenPoints, sum.TotalPoints)
 		fmt.Println()
-		fmt.Println("  Priority (Open by Tier):")
-		fmt.Printf("    T1 · Blocker:      %d\n", sum.TierCounts[model.Tier1])
-		fmt.Printf("    T2 · Important:    %d\n", sum.TierCounts[model.Tier2])
-		fmt.Printf("    T3 · Visual debt:  %d\n", sum.TierCounts[model.Tier3])
-		fmt.Printf("    T4 · Internal:     %d\n", sum.TierCounts[model.Tier4])
-		fmt.Printf("    T5 · Future:       %d\n", sum.TierCounts[model.Tier5])
+		fmt.Println("  Priority (Open / Total by Tier):")
+		fmt.Printf("    T1 · Blocker:      %d / %d\n", sum.TierCounts[model.Tier1], sum.TotalTierCounts[model.Tier1])
+		fmt.Printf("    T2 · Important:    %d / %d\n", sum.TierCounts[model.Tier2], sum.TotalTierCounts[model.Tier2])
+		fmt.Printf("    T3 · Visual debt:  %d / %d\n", sum.TierCounts[model.Tier3], sum.TotalTierCounts[model.Tier3])
+		fmt.Printf("    T4 · Internal:     %d / %d\n", sum.TierCounts[model.Tier4], sum.TotalTierCounts[model.Tier4])
+		fmt.Printf("    T5 · Future:       %d / %d\n", sum.TierCounts[model.Tier5], sum.TotalTierCounts[model.Tier5])
 		fmt.Println()
-		fmt.Println("  Effort Breakdown by Size:")
+		fmt.Println("  Effort Breakdown by Size (Open / Total):")
 		for _, s := range []model.Size{model.SizeXL, model.SizeL, model.SizeM, model.SizeS, model.SizeXS} {
-			fmt.Printf("    %-2s (%d pts): %d tasks\n", s, s.Points(), sum.SizeCounts[s])
+			fmt.Printf("    %-2s (%d pts): %d / %d tasks\n", s, s.Points(), sum.OpenSizeCounts[s], sum.SizeCounts[s])
 		}
 
 		return nil

@@ -349,10 +349,12 @@ func (s *Store) GetSummary(projectSlug string) (*model.Summary, error) {
 	}
 
 	summary := &model.Summary{
-		ProjectSlug: p.Slug,
-		ProjectName: p.Name,
-		SizeCounts:  make(map[model.Size]int),
-		TierCounts:  make(map[model.Tier]int),
+		ProjectSlug:     p.Slug,
+		ProjectName:     p.Name,
+		SizeCounts:      make(map[model.Size]int),
+		OpenSizeCounts:  make(map[model.Size]int),
+		TierCounts:      make(map[model.Tier]int),
+		TotalTierCounts: make(map[model.Tier]int),
 	}
 
 	groupMap := make(map[string]bool)
@@ -361,12 +363,14 @@ func (s *Store) GetSummary(projectSlug string) (*model.Summary, error) {
 		summary.TotalTasks++
 		summary.TotalPoints += t.Size.Points()
 		summary.SizeCounts[t.Size]++
+		summary.TotalTierCounts[t.Tier]++
 
 		if t.Done {
 			summary.CompletedTasks++
 		} else {
 			summary.OpenTasks++
 			summary.OpenPoints += t.Size.Points()
+			summary.OpenSizeCounts[t.Size]++
 			summary.TierCounts[t.Tier]++
 		}
 
