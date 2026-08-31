@@ -90,18 +90,32 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 
 	textCol := container.NewVBox(title)
 
-	// Collapsible Markdown Description Accordion
+	// Collapsible Markdown Description with custom clean renderer
 	descTrimmed := strings.TrimSpace(task.Description)
 	if descTrimmed != "" {
-		richText := widget.NewRichTextFromMarkdown(descTrimmed)
-		richText.Wrapping = fyne.TextWrapWord
+		mdWidget := RenderMarkdown(descTrimmed)
+		mdContainer := container.NewPadded(mdWidget)
+		mdContainer.Hide()
 
-		accItem := widget.NewAccordionItem("Details", richText)
-		accItem.Open = false
-		acc := widget.NewAccordion(accItem)
-		acc.MultiOpen = true
+		var toggleBtn *widget.Button
+		expanded := false
 
-		textCol.Add(acc)
+		toggleBtn = widget.NewButtonWithIcon("Details", theme.MenuExpandIcon(), func() {
+			expanded = !expanded
+			if expanded {
+				toggleBtn.SetIcon(theme.MenuDropUpIcon())
+				toggleBtn.SetText("Hide details")
+				mdContainer.Show()
+			} else {
+				toggleBtn.SetIcon(theme.MenuExpandIcon())
+				toggleBtn.SetText("Details")
+				mdContainer.Hide()
+			}
+		})
+		toggleBtn.Importance = widget.LowImportance
+
+		toggleRow := container.NewHBox(toggleBtn, layout.NewSpacer())
+		textCol.Add(container.NewVBox(toggleRow, mdContainer))
 	}
 
 	tagText := ""
