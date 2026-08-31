@@ -292,6 +292,9 @@ func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.
 		if filter.Group != nil && *filter.Group != "" && task.Group != *filter.Group {
 			continue
 		}
+		if filter.Size != nil && task.Size != *filter.Size {
+			continue
+		}
 		if filter.Done != nil && task.Done != *filter.Done {
 			continue
 		}

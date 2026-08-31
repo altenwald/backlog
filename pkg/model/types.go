@@ -104,6 +104,7 @@ type Project struct {
 type TaskFilter struct {
 	Tier     *Tier   `json:"tier,omitempty"`
 	Group    *string `json:"group,omitempty"`
+	Size     *Size   `json:"size,omitempty"`
 	Done     *bool   `json:"done,omitempty"`
 	Assignee *string `json:"assignee,omitempty"`
 	Search   string  `json:"search,omitempty"`

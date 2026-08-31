@@ -154,6 +154,9 @@ func (c *Client) ListTasks(projectSlug string, filter model.TaskFilter) ([]model
 	if filter.Group != nil && *filter.Group != "" {
 		params.Set("group", *filter.Group)
 	}
+	if filter.Size != nil && *filter.Size != "" {
+		params.Set("size", string(*filter.Size))
+	}
 	if filter.Done != nil {
 		params.Set("done", strconv.FormatBool(*filter.Done))
 	}

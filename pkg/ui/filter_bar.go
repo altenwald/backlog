@@ -12,8 +12,11 @@ import (
 type FilterBar struct {
 	container      *fyne.Container
 	searchEntry    *widget.Entry
+	hideDoneCheck  *widget.Check
 	buttons        []*widget.Button
 	currentTier    *model.Tier
+	currentSize    *model.Size
+	currentDone    *bool
 	currentSearch  string
 	onFilterChange func(filter model.TaskFilter)
 }
@@ -29,6 +32,16 @@ func NewFilterBar(onFilterChange func(filter model.TaskFilter)) *FilterBar {
 		fb.currentSearch = s
 		fb.emit()
 	}
+
+	fb.hideDoneCheck = widget.NewCheck("Hide completed", func(checked bool) {
+		if checked {
+			doneFalse := false
+			fb.currentDone = &doneFalse
+		} else {
+			fb.currentDone = nil
+		}
+		fb.emit()
+	})
 
 	btnAll := widget.NewButton("All", func() {
 		fb.currentTier = nil
@@ -78,12 +91,19 @@ func NewFilterBar(onFilterChange func(filter model.TaskFilter)) *FilterBar {
 		btnAll, btnT1, btnT2, btnT3, btnT4, btnT5,
 	)
 
-	// Sized search box with generous width
-	searchBox := container.NewGridWrap(fyne.NewSize(240, 36), fb.searchEntry)
-	topBar := container.NewBorder(nil, nil, nil, searchBox, tierRow)
+	// Sized search box with generous width and hide completed check
+	searchBox := container.NewGridWrap(fyne.NewSize(220, 36), fb.searchEntry)
+	rightControls := container.NewHBox(fb.hideDoneCheck, searchBox)
+
+	topBar := container.NewBorder(nil, nil, nil, rightControls, tierRow)
 	fb.container = container.NewVBox(topBar)
 
 	return fb
+}
+
+func (fb *FilterBar) SetSizeFilter(size *model.Size) {
+	fb.currentSize = size
+	fb.emit()
 }
 
 func (fb *FilterBar) updateActiveButton(activeIndex int) {
@@ -113,6 +133,8 @@ func (fb *FilterBar) emit() {
 	if fb.onFilterChange != nil {
 		fb.onFilterChange(model.TaskFilter{
 			Tier:   fb.currentTier,
+			Size:   fb.currentSize,
+			Done:   fb.currentDone,
 			Search: fb.currentSearch,
 		})
 	}

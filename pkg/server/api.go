@@ -169,6 +169,10 @@ func (h *APIHandler) listTasks(w http.ResponseWriter, r *http.Request) {
 	if gStr := q.Get("group"); gStr != "" {
 		filter.Group = &gStr
 	}
+	if sStr := q.Get("size"); sStr != "" {
+		size := model.Size(strings.ToUpper(sStr))
+		filter.Size = &size
+	}
 	if dStr := q.Get("done"); dStr != "" {
 		done := strings.EqualFold(dStr, "true") || dStr == "1"
 		filter.Done = &done

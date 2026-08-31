@@ -49,7 +49,9 @@ func NewBacklogApp(st *store.Store) *BacklogApp {
 }
 
 func (ba *BacklogApp) buildUI() {
-	ba.summaryBar = NewSummaryBar()
+	ba.summaryBar = NewSummaryBar(func(size *model.Size) {
+		ba.filterBar.SetSizeFilter(size)
+	})
 
 	ba.filterBar = NewFilterBar(func(filter model.TaskFilter) {
 		ba.currentFilter = filter
