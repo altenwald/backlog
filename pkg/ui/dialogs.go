@@ -22,6 +22,9 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 	groupEntry := widget.NewEntry()
 	groupEntry.SetPlaceHolder("e.g. Monetization, Domains, Bugs...")
 
+	assigneeEntry := widget.NewEntry()
+	assigneeEntry.SetPlaceHolder("e.g. @claude, @manuel...")
+
 	sizeSelect := widget.NewSelect([]string{"XS", "S", "M", "L", "XL"}, nil)
 	sizeSelect.SetSelected("M")
 
@@ -46,6 +49,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 		widget.NewFormItem("Title", titleEntry),
 		widget.NewFormItem("Description", descEntry),
 		widget.NewFormItem("Group / Category", groupEntry),
+		widget.NewFormItem("Assignee", assigneeEntry),
 		widget.NewFormItem("Effort Size", sizeSelect),
 		widget.NewFormItem("Priority / Tier", tierSelect),
 		widget.NewFormItem("Tag / Reference", tagEntry),
@@ -68,6 +72,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 			Title:       strings.TrimSpace(titleEntry.Text),
 			Description: strings.TrimSpace(descEntry.Text),
 			Group:       strings.TrimSpace(groupEntry.Text),
+			Assignee:    strings.TrimSpace(assigneeEntry.Text),
 			Size:        model.Size(sizeSelect.Selected),
 			Tier:        model.Tier(tierNum),
 			Tag:         strings.TrimSpace(tagEntry.Text),
@@ -79,7 +84,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 		}
 	}, parent)
 
-	d.Resize(fyne.NewSize(680, 580))
+	d.Resize(fyne.NewSize(680, 600))
 	d.Show()
 }
 
@@ -94,6 +99,10 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 
 	groupEntry := widget.NewEntry()
 	groupEntry.SetText(task.Group)
+
+	assigneeEntry := widget.NewEntry()
+	assigneeEntry.SetPlaceHolder("e.g. @claude, @manuel...")
+	assigneeEntry.SetText(task.Assignee)
 
 	sizeSelect := widget.NewSelect([]string{"XS", "S", "M", "L", "XL"}, nil)
 	sizeSelect.SetSelected(string(task.Size))
@@ -125,6 +134,7 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 		widget.NewFormItem("Title", titleEntry),
 		widget.NewFormItem("Description", descEntry),
 		widget.NewFormItem("Group / Category", groupEntry),
+		widget.NewFormItem("Assignee", assigneeEntry),
 		widget.NewFormItem("Effort Size", sizeSelect),
 		widget.NewFormItem("Priority / Tier", tierSelect),
 		widget.NewFormItem("Tag / Reference", tagEntry),
@@ -147,6 +157,7 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 		updated.Title = strings.TrimSpace(titleEntry.Text)
 		updated.Description = strings.TrimSpace(descEntry.Text)
 		updated.Group = strings.TrimSpace(groupEntry.Text)
+		updated.Assignee = strings.TrimSpace(assigneeEntry.Text)
 		updated.Size = model.Size(sizeSelect.Selected)
 		updated.Tier = model.Tier(tierNum)
 		updated.Tag = strings.TrimSpace(tagEntry.Text)
@@ -157,7 +168,7 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 		}
 	}, parent)
 
-	d.Resize(fyne.NewSize(680, 580))
+	d.Resize(fyne.NewSize(680, 600))
 	d.Show()
 }
 

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 
@@ -47,6 +48,27 @@ func SizeColor(s model.Size) color.Color {
 	default:
 		return color.NRGBA{R: 80, G: 80, B: 80, A: 255}
 	}
+}
+
+// AssigneeBadgeColor returns a rich purple/indigo color for agent & user badges
+func AssigneeBadgeColor() color.Color {
+	return color.NRGBA{R: 120, G: 75, B: 210, A: 255}
+}
+
+func FormatAssignee(assignee string) string {
+	name := strings.TrimSpace(assignee)
+	if name == "" {
+		return ""
+	}
+	clean := strings.TrimPrefix(name, "@")
+	lower := strings.ToLower(clean)
+
+	icon := "👤"
+	if lower == "claude" || lower == "antigravity" || lower == "gemini" || lower == "gpt" || lower == "bot" || lower == "ai" || strings.Contains(lower, "bot") || strings.Contains(lower, "ai") {
+		icon = "🤖"
+	}
+
+	return fmt.Sprintf("%s @%s", icon, clean)
 }
 
 func MakeBadge(text string, bg color.Color, fg color.Color) fyne.CanvasObject {
@@ -150,6 +172,12 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	}
 	tagLabel := widget.NewLabelWithStyle(tagText, fyne.TextAlignTrailing, fyne.TextStyle{Monospace: true})
 
+	// Assignee Badge (Option A: distinctive pill)
+	var assigneeBadge fyne.CanvasObject
+	if task.Assignee != "" {
+		assigneeBadge = MakeBadge(FormatAssignee(task.Assignee), AssigneeBadgeColor(), color.White)
+	}
+
 	// Action buttons
 	editBtn := widget.NewButtonWithIcon("", theme.DocumentCreateIcon(), func() {
 		if callbacks.OnEdit != nil {
@@ -165,8 +193,16 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	})
 	deleteBtn.Importance = widget.DangerImportance
 
-	// Ensure buttons and tags are always flushed completely to the right edge
-	tagRow := container.NewHBox(layout.NewSpacer(), tagLabel)
+	// Ensure assignee, buttons and tags are flushed cleanly to the right edge
+	tagRowItems := []fyne.CanvasObject{layout.NewSpacer()}
+	if assigneeBadge != nil {
+		tagRowItems = append(tagRowItems, assigneeBadge)
+	}
+	if tagLabel.Text != "" {
+		tagRowItems = append(tagRowItems, tagLabel)
+	}
+	tagRow := container.NewHBox(tagRowItems...)
+
 	btnRow := container.NewHBox(layout.NewSpacer(), editBtn, deleteBtn)
 	rightCol := container.NewVBox(tagRow, btnRow)
 

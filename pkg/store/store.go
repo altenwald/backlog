@@ -295,12 +295,24 @@ func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.
 		if filter.Done != nil && task.Done != *filter.Done {
 			continue
 		}
+		if filter.Assignee != nil && *filter.Assignee != "" {
+			reqAssignee := strings.ToLower(strings.TrimPrefix(*filter.Assignee, "@"))
+			taskAssignee := strings.ToLower(strings.TrimPrefix(task.Assignee, "@"))
+			if reqAssignee == "unassigned" {
+				if task.Assignee != "" {
+					continue
+				}
+			} else if taskAssignee != reqAssignee {
+				continue
+			}
+		}
 		if searchLower != "" {
 			inTitle := strings.Contains(strings.ToLower(task.Title), searchLower)
 			inDesc := strings.Contains(strings.ToLower(task.Description), searchLower)
 			inGroup := strings.Contains(strings.ToLower(task.Group), searchLower)
 			inTag := strings.Contains(strings.ToLower(task.Tag), searchLower)
-			if !inTitle && !inDesc && !inGroup && !inTag {
+			inAssignee := strings.Contains(strings.ToLower(task.Assignee), searchLower)
+			if !inTitle && !inDesc && !inGroup && !inTag && !inAssignee {
 				continue
 			}
 		}
@@ -515,6 +527,9 @@ func (s *Store) UpdateTask(projectSlug string, task model.Task) (*model.Task, er
 			if task.Resolution != "" {
 				p.Tasks[i].Resolution = task.Resolution
 			}
+			if task.Assignee != "" {
+				p.Tasks[i].Assignee = task.Assignee
+			}
 			p.Tasks[i].Tag = task.Tag
 			p.Tasks[i].UpdatedAt = now
 			p.UpdatedAt = now
@@ -533,6 +548,43 @@ func (s *Store) UpdateTask(projectSlug string, task model.Task) (*model.Task, er
 	}
 
 	return nil, fmt.Errorf("task ID '%s' not found in project '%s'", task.ID, projectSlug)
+}
+
+func (s *Store) AssignTask(projectSlug string, taskID string, assignee string) (*model.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if projectSlug == "" {
+		projectSlug = s.config.ActiveProject
+	}
+	projectSlug = strings.ToLower(projectSlug)
+
+	p, ok := s.projects[projectSlug]
+	if !ok {
+		return nil, fmt.Errorf("project '%s' not found", projectSlug)
+	}
+
+	for i := range p.Tasks {
+		if p.Tasks[i].ID == taskID {
+			p.Tasks[i].Assignee = strings.TrimSpace(assignee)
+			now := time.Now()
+			p.Tasks[i].UpdatedAt = now
+			p.UpdatedAt = now
+
+			if err := s.saveProject(p); err != nil {
+				return nil, err
+			}
+
+			go s.notify(Event{
+				Type:        EventTaskUpdated,
+				ProjectSlug: projectSlug,
+				TaskID:      taskID,
+			})
+			return &p.Tasks[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("task ID '%s' not found in project '%s'", taskID, projectSlug)
 }
 
 func (s *Store) DeleteTask(projectSlug string, taskID string) error {

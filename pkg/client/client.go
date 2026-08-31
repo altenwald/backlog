@@ -157,6 +157,9 @@ func (c *Client) ListTasks(projectSlug string, filter model.TaskFilter) ([]model
 	if filter.Done != nil {
 		params.Set("done", strconv.FormatBool(*filter.Done))
 	}
+	if filter.Assignee != nil && *filter.Assignee != "" {
+		params.Set("assignee", *filter.Assignee)
+	}
 	if filter.Search != "" {
 		params.Set("search", filter.Search)
 	}
@@ -202,6 +205,24 @@ func (c *Client) CompleteTask(projectSlug, taskID string, done bool, resolution 
 	}
 	body, _ := json.Marshal(reqBody)
 	u := fmt.Sprintf("%s/api/projects/%s/tasks/%s/done", c.baseURL, url.PathEscape(projectSlug), url.PathEscape(taskID))
+	resp, err := c.httpClient.Post(u, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error: %s", resp.Status)
+	}
+
+	var updated model.Task
+	err = json.NewDecoder(resp.Body).Decode(&updated)
+	return &updated, err
+}
+
+func (c *Client) AssignTask(projectSlug, taskID string, assignee string) (*model.Task, error) {
+	body, _ := json.Marshal(map[string]string{"assignee": assignee})
+	u := fmt.Sprintf("%s/api/projects/%s/tasks/%s/assign", c.baseURL, url.PathEscape(projectSlug), url.PathEscape(taskID))
 	resp, err := c.httpClient.Post(u, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, err

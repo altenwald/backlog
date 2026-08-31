@@ -108,6 +108,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithString("group", mcp.Description("Filter by category/group (e.g. 'Monetization', 'Domains', 'Bugs')")),
 			mcp.WithBoolean("done", mcp.Description("Filter by status: true=completed, false=open")),
 			mcp.WithString("search", mcp.Description("Text search term")),
+			mcp.WithString("assignee", mcp.Description("Filter by assignee (e.g. 'claude', 'manuel', 'unassigned')")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			project, _ := req.Params.Arguments["project"].(string)
@@ -128,6 +129,9 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			}
 			if searchVal, ok := req.Params.Arguments["search"].(string); ok {
 				filter.Search = searchVal
+			}
+			if assigneeVal, ok := req.Params.Arguments["assignee"].(string); ok && assigneeVal != "" {
+				filter.Assignee = &assigneeVal
 			}
 
 			tasks, err := st.ListTasks(project, filter)
@@ -205,6 +209,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithNumber("tier", mcp.Description("Priority tier: 1 (Blocker) to 5 (Future). Default 3")),
 			mcp.WithString("tag", mcp.Description("Tag or reference label (e.g. 'TODO', 'spec 08-24')")),
 			mcp.WithString("resolution", mcp.Description("Summary of implementation details or resolution (optional)")),
+			mcp.WithString("assignee", mcp.Description("Assignee name/handle (e.g. 'claude', 'manuel')")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			title, ok := req.Params.Arguments["title"].(string)
@@ -222,6 +227,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			sizeStr, _ := req.Params.Arguments["size"].(string)
 			tag, _ := req.Params.Arguments["tag"].(string)
 			resolution, _ := req.Params.Arguments["resolution"].(string)
+			assignee, _ := req.Params.Arguments["assignee"].(string)
 
 			tier := model.Tier3
 			if tierVal, ok := req.Params.Arguments["tier"].(float64); ok && tierVal >= 1 && tierVal <= 5 {
@@ -240,6 +246,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 				Tier:        tier,
 				Tag:         tag,
 				Resolution:  resolution,
+				Assignee:    assignee,
 			})
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
@@ -248,6 +255,48 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			sum, _ := st.GetSummary(project)
 			return mcp.NewToolResultText(fmt.Sprintf("✔ Task created in '%s': #%s [%s] [%s] %s\nProject status: %d/%d open (%d pts)",
 				project, task.ID, task.Size, task.Tier.ShortLabel(), task.Title, sum.OpenTasks, sum.TotalTasks, sum.OpenPoints)), nil
+		},
+	)
+
+	// Tool: assign_task
+	s.AddTool(
+		mcp.NewTool(
+			"assign_task",
+			mcp.WithDescription("Assign a task to an agent (e.g. 'claude', 'antigravity') or person, or unassign (empty string)."),
+			mcp.WithString("task_id", mcp.Description("Numeric ID of the task"), mcp.Required()),
+			mcp.WithString("assignee", mcp.Description("Agent or user handle to assign to (e.g. 'claude', 'manuel'). Pass empty string to unassign."), mcp.Required()),
+			mcp.WithString("project", mcp.Description("Project slug (optional)")),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			taskIDRaw := req.Params.Arguments["task_id"]
+			taskID := ""
+			switch v := taskIDRaw.(type) {
+			case string:
+				taskID = v
+			case float64:
+				taskID = strconv.Itoa(int(v))
+			}
+
+			if taskID == "" {
+				return mcp.NewToolResultError("parameter 'task_id' is required"), nil
+			}
+
+			assignee, _ := req.Params.Arguments["assignee"].(string)
+
+			project, _ := req.Params.Arguments["project"].(string)
+			if project == "" {
+				project = st.GetActiveProjectSlug()
+			}
+
+			task, err := st.AssignTask(project, taskID, assignee)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			if task.Assignee != "" {
+				return mcp.NewToolResultText(fmt.Sprintf("✔ Task #%s assigned to @%s in '%s': %s", task.ID, strings.TrimPrefix(task.Assignee, "@"), project, task.Title)), nil
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Task #%s unassigned in '%s': %s", task.ID, project, task.Title)), nil
 		},
 	)
 
@@ -260,6 +309,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithString("project", mcp.Description("Project slug (optional)")),
 			mcp.WithBoolean("done", mcp.Description("Completed status: true (default) or false")),
 			mcp.WithString("resolution", mcp.Description("Summary of implementation details, architectural decisions, and resolution (Markdown supported)")),
+			mcp.WithString("assignee", mcp.Description("Agent or user handle that resolved the task (optional)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			taskIDRaw := req.Params.Arguments["task_id"]
@@ -285,6 +335,10 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 				done = doneVal
 			}
 			resolution, _ := req.Params.Arguments["resolution"].(string)
+
+			if aVal, ok := req.Params.Arguments["assignee"].(string); ok && aVal != "" {
+				_, _ = st.AssignTask(project, taskID, aVal)
+			}
 
 			task, err := st.CompleteTask(project, taskID, done, resolution)
 			if err != nil {
@@ -319,6 +373,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithNumber("tier", mcp.Description("New Tier (1..5)")),
 			mcp.WithString("tag", mcp.Description("New tag")),
 			mcp.WithString("resolution", mcp.Description("New resolution / implementation details summary")),
+			mcp.WithString("assignee", mcp.Description("New assignee handle (or empty to unassign)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			taskIDRaw := req.Params.Arguments["task_id"]
@@ -360,6 +415,9 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			}
 			if resVal, ok := req.Params.Arguments["resolution"].(string); ok {
 				update.Resolution = resVal
+			}
+			if assignVal, ok := req.Params.Arguments["assignee"].(string); ok {
+				update.Assignee = assignVal
 			}
 
 			task, err := st.UpdateTask(project, update)

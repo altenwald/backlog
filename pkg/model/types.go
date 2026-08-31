@@ -85,6 +85,7 @@ type Task struct {
 	Tier        Tier       `json:"tier"`
 	Done        bool       `json:"done"`
 	DoneAt      *time.Time `json:"done_at,omitempty"`
+	Assignee    string     `json:"assignee,omitempty"`   // e.g. "claude", "antigravity", "manuel"
 	Resolution  string     `json:"resolution,omitempty"` // Summary of implementation details and resolution
 	Tag         string     `json:"tag,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -101,10 +102,11 @@ type Project struct {
 }
 
 type TaskFilter struct {
-	Tier   *Tier   `json:"tier,omitempty"`
-	Group  *string `json:"group,omitempty"`
-	Done   *bool   `json:"done,omitempty"`
-	Search string  `json:"search,omitempty"`
+	Tier     *Tier   `json:"tier,omitempty"`
+	Group    *string `json:"group,omitempty"`
+	Done     *bool   `json:"done,omitempty"`
+	Assignee *string `json:"assignee,omitempty"`
+	Search   string  `json:"search,omitempty"`
 }
 
 type Summary struct {

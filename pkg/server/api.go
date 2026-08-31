@@ -34,6 +34,7 @@ func (h *APIHandler) RegisterRoutes(r chi.Router) {
 			r.Get("/tasks/{id}", h.getTask)
 			r.Put("/tasks/{id}", h.updateTask)
 			r.Post("/tasks/{id}/done", h.completeTask)
+			r.Post("/tasks/{id}/assign", h.assignTask)
 			r.Delete("/tasks/{id}", h.deleteTask)
 		})
 	})
@@ -172,6 +173,9 @@ func (h *APIHandler) listTasks(w http.ResponseWriter, r *http.Request) {
 		done := strings.EqualFold(dStr, "true") || dStr == "1"
 		filter.Done = &done
 	}
+	if aStr := q.Get("assignee"); aStr != "" {
+		filter.Assignee = &aStr
+	}
 
 	tasks, err := h.store.ListTasks(slug, filter)
 	if err != nil {
@@ -253,6 +257,23 @@ func (h *APIHandler) completeTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updated, err := h.store.CompleteTask(slug, id, done, resolution)
+	if err != nil {
+		errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, updated)
+}
+
+func (h *APIHandler) assignTask(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	id := chi.URLParam(r, "id")
+
+	var body struct {
+		Assignee string `json:"assignee"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	updated, err := h.store.AssignTask(slug, id, body.Assignee)
 	if err != nil {
 		errorResponse(w, http.StatusBadRequest, err.Error())
 		return

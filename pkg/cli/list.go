@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	flagTier   int
-	flagGroup  string
-	flagDone   string // "true", "false", "all"
-	flagSearch string
+	flagTier     int
+	flagGroup    string
+	flagDone     string // "true", "false", "all"
+	flagAssignee string
+	flagSearch   string
 )
 
 var listCmd = &cobra.Command{
@@ -37,6 +38,9 @@ var listCmd = &cobra.Command{
 		} else if flagDone == "false" || flagDone == "" {
 			d := false
 			filter.Done = &d
+		}
+		if flagAssignee != "" {
+			filter.Assignee = &flagAssignee
 		}
 
 		c := client.NewClient(flagAPIURL)
@@ -95,8 +99,11 @@ var listCmd = &cobra.Command{
 			if t.Tag != "" {
 				tag += fmt.Sprintf(" (%s)", t.Tag)
 			}
+			if t.Assignee != "" {
+				tag += fmt.Sprintf(" @%s", strings.TrimPrefix(t.Assignee, "@"))
+			}
 
-			fmt.Printf("%s #%-3s [%-2s] [%-2s] %-40s%s\n",
+			fmt.Printf("%s #%-3s [%-2s] [%-2s] %-38s%s\n",
 				statusIcon, t.ID, t.Size, t.Tier.ShortLabel(), t.Title, tag)
 		}
 
@@ -107,7 +114,8 @@ var listCmd = &cobra.Command{
 func init() {
 	listCmd.Flags().IntVarP(&flagTier, "tier", "t", 0, "Filter by priority Tier (1..5)")
 	listCmd.Flags().StringVarP(&flagGroup, "group", "g", "", "Filter by group/category")
-	listCmd.Flags().StringVarP(&flagDone, "done", "d", "false", "Filter by status: 'false' (open), 'true' (completed), 'all'")
-	listCmd.Flags().StringVarP(&flagSearch, "search", "s", "", "Search query term")
+	listCmd.Flags().StringVarP(&flagDone, "status", "s", "false", "Filter by status: true (done), false (open), all")
+	listCmd.Flags().StringVarP(&flagAssignee, "assignee", "a", "", "Filter by assignee handle (e.g. 'claude', 'unassigned')")
+	listCmd.Flags().StringVarP(&flagSearch, "search", "q", "", "Search by keyword in title/desc/group")
 	RootCmd.AddCommand(listCmd)
 }
