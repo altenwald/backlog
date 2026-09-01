@@ -26,7 +26,7 @@ func NewServer(st *store.Store, port int) *Server {
 		port = 8484
 	}
 	mcpSrv := NewMCPServer(st)
-	sseSrv := server.NewSSEServer(mcpSrv, fmt.Sprintf("http://127.0.0.1:%d", port+1))
+	sseSrv := server.NewSSEServer(mcpSrv, server.WithBaseURL(fmt.Sprintf("http://127.0.0.1:%d", port+1)))
 	return &Server{
 		store:     st,
 		port:      port,

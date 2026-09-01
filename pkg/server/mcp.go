@@ -13,8 +13,121 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+const BacklogInstructions = `You are connected to Backlog, an issue and task tracking management system for software engineering.
+Follow this standard protocol when interacting with Backlog:
+
+1. INITIAL ON-CONNECT HANDSHAKE:
+   - As soon as you connect to Backlog or start a conversation, immediately call 'list_tasks(assignee="<your-handle>", done=false)' (where <your-handle> is your agent handle like 'claude', 'antigravity', etc.) to inspect any pending tasks currently assigned to you by the user or team.
+   - If you have assigned tasks, report them to the user and prioritize working on them before picking up unassigned work.
+
+2. PERIODIC ASSIGNMENT CHECKING:
+   - While working in the session, between tasks or when completing a milestone, periodically check 'list_tasks(assignee="<your-handle>", done=false)' to discover if the user or another agent has assigned you new tasks in the GUI.
+
+3. WORKFLOW LIFECYCLE & STRICT TDD REQUIREMENT:
+   - Discover: If you have no assigned tasks, use 'get_top_priorities' or 'list_tasks(assignee="unassigned", done=false)' to find pending work.
+   - Claim & Assign: BEFORE starting work on a task, call 'assign_task(task_id="<ID>", assignee="<your-handle>")'. This updates the Backlog GUI in real time and signals that the task is currently in progress.
+   - Strict TDD (Test-Driven Development):
+     * Always develop following a strict TDD methodology: write or update tests FIRST to specify the expected behavior.
+     * Implement the code changes to satisfy the tests.
+     * Maximize test coverage: ensure thorough coverage for all new or modified code paths.
+     * ZERO COVERAGE REGRESSION: The overall project test coverage percentage MUST NOT decrease with any new commit.
+   - Git Commit Requirement:
+     * The work for every task MUST culminate in a Git commit once tests pass and coverage is verified.
+   - Complete with Commit Hash:
+     * Once committed, call 'complete_task(task_id="<ID>", done=true, resolution="...")'.
+     * The 'resolution' field MUST explicitly include:
+       1) The Git commit hash created (e.g. 'Commit: abc1234').
+       2) Summary of implementation details and architectural decisions.
+       3) Files modified and test verification / coverage results.
+
+4. ESTIMATION AND PRIORITIES:
+   - Priority Tiers: 1 (Blocker) -> 2 (Important) -> 3 (Visual debt) -> 4 (Internal) -> 5 (Future). Always address Tier 1 and 2 tasks first.
+   - Effort Sizes: XS (1 pt), S (2 pts), M (3 pts), L (5 pts), XL (8 pts).
+
+5. REPORTING:
+   - Always inform the user when claiming a task, report test coverage results, and report completion with the commit hash and resolution summary.`
+
 func NewMCPServer(st *store.Store) *server.MCPServer {
-	s := server.NewMCPServer("backlog", "1.0.0", server.WithLogging())
+	s := server.NewMCPServer(
+		"backlog",
+		"1.0.0",
+		server.WithLogging(),
+		server.WithInstructions(BacklogInstructions),
+	)
+
+	// Resource: backlog://workflow
+	s.AddResource(
+		mcp.NewResource("backlog://workflow", "Backlog AI Workflow Guidelines", mcp.WithMIMEType("text/markdown")),
+		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			return []mcp.ResourceContents{
+				mcp.TextResourceContents{
+					URI:      "backlog://workflow",
+					MIMEType: "text/markdown",
+					Text:     BacklogInstructions,
+				},
+			}, nil
+		},
+	)
+
+	// Prompt: pick_next_task
+	s.AddPrompt(
+		mcp.NewPrompt(
+			"pick_next_task",
+			mcp.WithPromptDescription("Guide the AI to find the highest-priority pending task, assign it to itself, and plan implementation."),
+			mcp.WithArgument("agent", mcp.ArgumentDescription("Your agent handle (e.g. 'claude', 'antigravity')"), mcp.RequiredArgument()),
+			mcp.WithArgument("project", mcp.ArgumentDescription("Project slug (optional, defaults to active)")),
+		),
+		func(ctx context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+			agent := req.Params.Arguments["agent"]
+			project := req.Params.Arguments["project"]
+			if project == "" {
+				project = st.GetActiveProjectSlug()
+			}
+
+			promptText := fmt.Sprintf(`Please perform the following workflow in Backlog:
+1. Check for tasks assigned to you: call 'list_tasks(assignee="%s", done=false, project="%s")'.
+2. If you already have assigned open tasks, pick the highest priority one and proceed.
+3. If no tasks are assigned to you, call 'get_top_priorities(project="%s", limit=5)' or 'list_tasks(assignee="unassigned", done=false, project="%s")'.
+4. Claim the task: call 'assign_task(task_id="<ID>", assignee="%s", project="%s")' so it shows assigned to you in the Backlog GUI.
+5. Plan implementation following TDD (write tests first, ensure coverage does not decrease).`, agent, project, project, project, agent, project)
+
+			return mcp.NewGetPromptResult(
+				"Pick Next Task Workflow",
+				[]mcp.PromptMessage{
+					mcp.NewPromptMessage(mcp.RoleUser, mcp.NewTextContent(promptText)),
+				},
+			), nil
+		},
+	)
+
+	// Prompt: complete_task_workflow
+	s.AddPrompt(
+		mcp.NewPrompt(
+			"complete_task_workflow",
+			mcp.WithPromptDescription("Guide the AI to mark a task as completed with structured resolution details including Git commit hash and test coverage."),
+			mcp.WithArgument("task_id", mcp.ArgumentDescription("ID of the task completed"), mcp.RequiredArgument()),
+			mcp.WithArgument("commit_hash", mcp.ArgumentDescription("Git commit hash created for this task"), mcp.RequiredArgument()),
+			mcp.WithArgument("resolution", mcp.ArgumentDescription("Markdown summary of implementation details and test coverage"), mcp.RequiredArgument()),
+		),
+		func(ctx context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+			taskID := req.Params.Arguments["task_id"]
+			commitHash := req.Params.Arguments["commit_hash"]
+			res := req.Params.Arguments["resolution"]
+
+			promptText := fmt.Sprintf(`Follow the completion protocol:
+1. Ensure all tests pass and overall test coverage has not decreased.
+2. Verify commit '%s' exists in git history.
+3. Call 'complete_task(task_id="%s", done=true, resolution="Commit: %s\n\n%s")'.
+4. Summarize the resolution to the user with the commit hash and test results.`, commitHash, taskID, commitHash, res)
+
+			return mcp.NewGetPromptResult(
+				"Complete Task Workflow",
+				[]mcp.PromptMessage{
+					mcp.NewPromptMessage(mcp.RoleUser, mcp.NewTextContent(promptText)),
+				},
+			), nil
+		},
+	)
 
 	// Tool: list_projects
 	s.AddTool(
@@ -87,8 +200,8 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithString("project", mcp.Description("Project slug to activate (e.g. 'dymmer', 'conta')"), mcp.Required()),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			project, ok := req.Params.Arguments["project"].(string)
-			if !ok || project == "" {
+			project := req.GetString("project", "")
+			if project == "" {
 				return mcp.NewToolResultError("parameter 'project' is required"), nil
 			}
 			if err := st.SetActiveProject(project); err != nil {
@@ -102,35 +215,43 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 	s.AddTool(
 		mcp.NewTool(
 			"list_tasks",
-			mcp.WithDescription("List tasks in a project with optional filters by Tier (1 to 5), Group, Status (open/completed), or search query."),
+			mcp.WithDescription("List tasks in a project with optional filters by Tier (1 to 5), Group, Status (open/completed), Size, or search query."),
 			mcp.WithString("project", mcp.Description("Project slug (optional; defaults to active project)")),
 			mcp.WithNumber("tier", mcp.Description("Filter by priority Tier: 1=Blocker, 2=Important, 3=Visual debt, 4=Internal, 5=Future")),
 			mcp.WithString("group", mcp.Description("Filter by category/group (e.g. 'Monetization', 'Domains', 'Bugs')")),
+			mcp.WithString("size", mcp.Description("Filter by size: 'XS', 'S', 'M', 'L', 'XL'")),
 			mcp.WithBoolean("done", mcp.Description("Filter by status: true=completed, false=open")),
 			mcp.WithString("search", mcp.Description("Text search term")),
 			mcp.WithString("assignee", mcp.Description("Filter by assignee (e.g. 'claude', 'manuel', 'unassigned')")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			project, _ := req.Params.Arguments["project"].(string)
+			project := req.GetString("project", "")
 			if project == "" {
 				project = st.GetActiveProjectSlug()
 			}
 
 			filter := model.TaskFilter{}
-			if tierVal, ok := req.Params.Arguments["tier"].(float64); ok && tierVal > 0 {
-				t := model.Tier(int(tierVal))
+			tierVal := req.GetInt("tier", 0)
+			if tierVal >= 1 && tierVal <= 5 {
+				t := model.Tier(tierVal)
 				filter.Tier = &t
 			}
-			if groupVal, ok := req.Params.Arguments["group"].(string); ok && groupVal != "" {
-				filter.Group = &groupVal
+			if gVal := req.GetString("group", ""); gVal != "" {
+				filter.Group = &gVal
 			}
-			if doneVal, ok := req.Params.Arguments["done"].(bool); ok {
-				filter.Done = &doneVal
+			if sVal := req.GetString("size", ""); sVal != "" {
+				sz := model.Size(strings.ToUpper(sVal))
+				filter.Size = &sz
 			}
-			if searchVal, ok := req.Params.Arguments["search"].(string); ok {
+			if rawArgs := req.GetArguments(); rawArgs != nil {
+				if doneVal, ok := rawArgs["done"].(bool); ok {
+					filter.Done = &doneVal
+				}
+			}
+			if searchVal := req.GetString("search", ""); searchVal != "" {
 				filter.Search = searchVal
 			}
-			if assigneeVal, ok := req.Params.Arguments["assignee"].(string); ok && assigneeVal != "" {
+			if assigneeVal := req.GetString("assignee", ""); assigneeVal != "" {
 				filter.Assignee = &assigneeVal
 			}
 
@@ -152,7 +273,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithString("project", mcp.Description("Project slug (optional; defaults to active project)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			project, _ := req.Params.Arguments["project"].(string)
+			project := req.GetString("project", "")
 			if project == "" {
 				project = st.GetActiveProjectSlug()
 			}
@@ -176,14 +297,14 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithNumber("limit", mcp.Description("Number of tasks to return (default 5)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			project, _ := req.Params.Arguments["project"].(string)
+			project := req.GetString("project", "")
 			if project == "" {
 				project = st.GetActiveProjectSlug()
 			}
 
-			limit := 5
-			if lVal, ok := req.Params.Arguments["limit"].(float64); ok && lVal > 0 {
-				limit = int(lVal)
+			limit := req.GetInt("limit", 5)
+			if limit <= 0 {
+				limit = 5
 			}
 
 			tasks, err := st.GetTopPriorities(project, limit)
@@ -212,30 +333,27 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithString("assignee", mcp.Description("Assignee name/handle (e.g. 'claude', 'manuel')")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			title, ok := req.Params.Arguments["title"].(string)
-			if !ok || strings.TrimSpace(title) == "" {
+			title := strings.TrimSpace(req.GetString("title", ""))
+			if title == "" {
 				return mcp.NewToolResultError("parameter 'title' is required"), nil
 			}
 
-			project, _ := req.Params.Arguments["project"].(string)
+			project := req.GetString("project", "")
 			if project == "" {
 				project = st.GetActiveProjectSlug()
 			}
 
-			desc, _ := req.Params.Arguments["description"].(string)
-			group, _ := req.Params.Arguments["group"].(string)
-			sizeStr, _ := req.Params.Arguments["size"].(string)
-			tag, _ := req.Params.Arguments["tag"].(string)
-			resolution, _ := req.Params.Arguments["resolution"].(string)
-			assignee, _ := req.Params.Arguments["assignee"].(string)
+			desc := req.GetString("description", "")
+			group := req.GetString("group", "")
+			sizeStr := req.GetString("size", "M")
+			tag := req.GetString("tag", "")
+			resolution := req.GetString("resolution", "")
+			assignee := req.GetString("assignee", "")
 
 			tier := model.Tier3
-			if tierVal, ok := req.Params.Arguments["tier"].(float64); ok && tierVal >= 1 && tierVal <= 5 {
-				tier = model.Tier(int(tierVal))
-			}
-
-			if sizeStr == "" {
-				sizeStr = "M"
+			tierVal := req.GetInt("tier", 3)
+			if tierVal >= 1 && tierVal <= 5 {
+				tier = model.Tier(tierVal)
 			}
 
 			task, err := st.AddTask(project, model.Task{
@@ -262,28 +380,27 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 	s.AddTool(
 		mcp.NewTool(
 			"assign_task",
-			mcp.WithDescription("Assign a task to an agent (e.g. 'claude', 'antigravity') or person, or unassign (empty string)."),
+			mcp.WithDescription("Assign a task to an agent (e.g. 'claude', 'antigravity') or person, or unassign (empty string). Call this before starting work on a task."),
 			mcp.WithString("task_id", mcp.Description("Numeric ID of the task"), mcp.Required()),
 			mcp.WithString("assignee", mcp.Description("Agent or user handle to assign to (e.g. 'claude', 'manuel'). Pass empty string to unassign."), mcp.Required()),
 			mcp.WithString("project", mcp.Description("Project slug (optional)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			taskIDRaw := req.Params.Arguments["task_id"]
-			taskID := ""
-			switch v := taskIDRaw.(type) {
-			case string:
-				taskID = v
-			case float64:
-				taskID = strconv.Itoa(int(v))
+			taskID := req.GetString("task_id", "")
+			if taskID == "" {
+				if rawArgs := req.GetArguments(); rawArgs != nil {
+					if v, ok := rawArgs["task_id"].(float64); ok {
+						taskID = strconv.Itoa(int(v))
+					}
+				}
 			}
 
 			if taskID == "" {
 				return mcp.NewToolResultError("parameter 'task_id' is required"), nil
 			}
 
-			assignee, _ := req.Params.Arguments["assignee"].(string)
-
-			project, _ := req.Params.Arguments["project"].(string)
+			assignee := req.GetString("assignee", "")
+			project := req.GetString("project", "")
 			if project == "" {
 				project = st.GetActiveProjectSlug()
 			}
@@ -304,39 +421,41 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 	s.AddTool(
 		mcp.NewTool(
 			"complete_task",
-			mcp.WithDescription("Mark a task as completed with optional implementation details / resolution summary (or reopen if done: false)."),
+			mcp.WithDescription("Mark a task as completed. WORKFLOW REQUIREMENT: Develop following strict TDD with high test coverage (zero coverage regression). Work must culminate in a Git commit. The 'resolution' argument MUST include the commit hash created (e.g. 'Commit: abc1234') along with implementation details and test verification summary."),
 			mcp.WithString("task_id", mcp.Description("Numeric ID of the task"), mcp.Required()),
 			mcp.WithString("project", mcp.Description("Project slug (optional)")),
 			mcp.WithBoolean("done", mcp.Description("Completed status: true (default) or false")),
-			mcp.WithString("resolution", mcp.Description("Summary of implementation details, architectural decisions, and resolution (Markdown supported)")),
+			mcp.WithString("resolution", mcp.Description("Summary of implementation details, files changed, test verification, and MUST include the Git commit hash (e.g. 'Commit: a1b2c3d')")),
 			mcp.WithString("assignee", mcp.Description("Agent or user handle that resolved the task (optional)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			taskIDRaw := req.Params.Arguments["task_id"]
-			taskID := ""
-			switch v := taskIDRaw.(type) {
-			case string:
-				taskID = v
-			case float64:
-				taskID = strconv.Itoa(int(v))
+			taskID := req.GetString("task_id", "")
+			if taskID == "" {
+				if rawArgs := req.GetArguments(); rawArgs != nil {
+					if v, ok := rawArgs["task_id"].(float64); ok {
+						taskID = strconv.Itoa(int(v))
+					}
+				}
 			}
 
 			if taskID == "" {
 				return mcp.NewToolResultError("parameter 'task_id' is required"), nil
 			}
 
-			project, _ := req.Params.Arguments["project"].(string)
+			project := req.GetString("project", "")
 			if project == "" {
 				project = st.GetActiveProjectSlug()
 			}
 
 			done := true
-			if doneVal, ok := req.Params.Arguments["done"].(bool); ok {
-				done = doneVal
+			if rawArgs := req.GetArguments(); rawArgs != nil {
+				if dVal, ok := rawArgs["done"].(bool); ok {
+					done = dVal
+				}
 			}
-			resolution, _ := req.Params.Arguments["resolution"].(string)
+			resolution := req.GetString("resolution", "")
 
-			if aVal, ok := req.Params.Arguments["assignee"].(string); ok && aVal != "" {
+			if aVal := req.GetString("assignee", ""); aVal != "" {
 				_, _ = st.AssignTask(project, taskID, aVal)
 			}
 
@@ -376,47 +495,47 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithString("assignee", mcp.Description("New assignee handle (or empty to unassign)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			taskIDRaw := req.Params.Arguments["task_id"]
-			taskID := ""
-			switch v := taskIDRaw.(type) {
-			case string:
-				taskID = v
-			case float64:
-				taskID = strconv.Itoa(int(v))
+			taskID := req.GetString("task_id", "")
+			if taskID == "" {
+				if rawArgs := req.GetArguments(); rawArgs != nil {
+					if v, ok := rawArgs["task_id"].(float64); ok {
+						taskID = strconv.Itoa(int(v))
+					}
+				}
 			}
 
 			if taskID == "" {
 				return mcp.NewToolResultError("parameter 'task_id' is required"), nil
 			}
 
-			project, _ := req.Params.Arguments["project"].(string)
+			project := req.GetString("project", "")
 			if project == "" {
 				project = st.GetActiveProjectSlug()
 			}
 
 			update := model.Task{ID: taskID}
-			if t, ok := req.Params.Arguments["title"].(string); ok {
+			if t := req.GetString("title", ""); t != "" {
 				update.Title = t
 			}
-			if d, ok := req.Params.Arguments["description"].(string); ok {
+			if d := req.GetString("description", ""); d != "" {
 				update.Description = d
 			}
-			if g, ok := req.Params.Arguments["group"].(string); ok {
+			if g := req.GetString("group", ""); g != "" {
 				update.Group = g
 			}
-			if s, ok := req.Params.Arguments["size"].(string); ok && s != "" {
+			if s := req.GetString("size", ""); s != "" {
 				update.Size = model.Size(strings.ToUpper(s))
 			}
-			if tierVal, ok := req.Params.Arguments["tier"].(float64); ok && tierVal > 0 {
-				update.Tier = model.Tier(int(tierVal))
+			if tierVal := req.GetInt("tier", 0); tierVal > 0 {
+				update.Tier = model.Tier(tierVal)
 			}
-			if tagVal, ok := req.Params.Arguments["tag"].(string); ok {
+			if tagVal := req.GetString("tag", ""); tagVal != "" {
 				update.Tag = tagVal
 			}
-			if resVal, ok := req.Params.Arguments["resolution"].(string); ok {
+			if resVal := req.GetString("resolution", ""); resVal != "" {
 				update.Resolution = resVal
 			}
-			if assignVal, ok := req.Params.Arguments["assignee"].(string); ok {
+			if assignVal := req.GetString("assignee", ""); assignVal != "" {
 				update.Assignee = assignVal
 			}
 
@@ -438,20 +557,20 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithString("project", mcp.Description("Project slug")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			taskIDRaw := req.Params.Arguments["task_id"]
-			taskID := ""
-			switch v := taskIDRaw.(type) {
-			case string:
-				taskID = v
-			case float64:
-				taskID = strconv.Itoa(int(v))
+			taskID := req.GetString("task_id", "")
+			if taskID == "" {
+				if rawArgs := req.GetArguments(); rawArgs != nil {
+					if v, ok := rawArgs["task_id"].(float64); ok {
+						taskID = strconv.Itoa(int(v))
+					}
+				}
 			}
 
 			if taskID == "" {
 				return mcp.NewToolResultError("parameter 'task_id' is required"), nil
 			}
 
-			project, _ := req.Params.Arguments["project"].(string)
+			project := req.GetString("project", "")
 			if project == "" {
 				project = st.GetActiveProjectSlug()
 			}

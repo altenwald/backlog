@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"testing"
@@ -97,5 +98,24 @@ func TestMCPServerTools(t *testing.T) {
 	}
 	if _, ok := m["terminated_at"]; !ok {
 		t.Fatalf("JSON missing terminated_at field: %s", string(data))
+	}
+
+	// 5. Test MCP Initialize returns instructions
+	initMsg := []byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}`)
+	resp := srv.HandleMessage(context.Background(), initMsg)
+	respBytes, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var initResp struct {
+		Result struct {
+			Instructions string `json:"instructions"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(respBytes, &initResp); err != nil {
+		t.Fatal(err)
+	}
+	if initResp.Result.Instructions == "" {
+		t.Fatal("expected instructions in initialize response")
 	}
 }
