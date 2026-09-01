@@ -162,7 +162,7 @@ var projectDeleteCmd = &cobra.Command{
 
 func init() {
 	projectNewCmd.Flags().StringVarP(&newProjName, "name", "n", "", "Public display name of the project")
-	projectNewCmd.Flags().StringVarP(&newProjDesc, "desc", "d", "", "Project description")
+	projectNewCmd.Flags().StringVar(&newProjDesc, "desc", "", "Project description")
 
 	projectCmd.AddCommand(projectUseCmd)
 	projectCmd.AddCommand(projectNewCmd)
