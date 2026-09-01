@@ -9,7 +9,13 @@ build:
 test:
 	go test -v ./...
 
-bundle: build
+bundle:
+	@echo "Building Universal binary (arm64 + amd64)..."
+	@mkdir -p bin
+	@CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o bin/backlog_arm64 ./cmd/backlog
+	@CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -o bin/backlog_amd64 ./cmd/backlog
+	@lipo -create -output bin/backlog bin/backlog_amd64 bin/backlog_arm64
+	@rm -f bin/backlog_arm64 bin/backlog_amd64
 	@echo "Bundling $(BUNDLE_DIR)..."
 	@rm -rf $(BUNDLE_DIR)
 	@mkdir -p $(BUNDLE_DIR)/Contents/MacOS
@@ -39,7 +45,8 @@ bundle: build
 		'    <true/>' \
 		'</dict>' \
 		'</plist>' > $(BUNDLE_DIR)/Contents/Info.plist
-	@echo "✔ $(BUNDLE_DIR) created! You can launch it with: open $(BUNDLE_DIR)"
+	@echo "✔ Universal $(BUNDLE_DIR) created! (Apple Silicon + Intel)"
+	@file $(BUNDLE_DIR)/Contents/MacOS/backlog
 
 clean:
 	rm -rf bin/
