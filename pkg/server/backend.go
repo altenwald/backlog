@@ -31,6 +31,7 @@ type Backend interface {
 	CompleteTask(slug string, taskID string, done bool, resolution string) (*model.Task, error)
 	AssignTask(slug string, taskID string, assignee string) (*model.Task, error)
 	DeleteTask(slug string, taskID string) error
+	DeleteProject(slug string) error
 }
 
 // storeBackend adapts *store.Store to Backend
@@ -129,6 +130,10 @@ func (b *storeBackend) AssignTask(slug string, taskID string, assignee string) (
 
 func (b *storeBackend) DeleteTask(slug string, taskID string) error {
 	return b.st.DeleteTask(slug, taskID)
+}
+
+func (b *storeBackend) DeleteProject(slug string) error {
+	return b.st.DeleteProject(slug)
 }
 
 // clientBackend adapts *client.Client to Backend
@@ -230,4 +235,8 @@ func (b *clientBackend) AssignTask(slug string, taskID string, assignee string) 
 
 func (b *clientBackend) DeleteTask(slug string, taskID string) error {
 	return b.c.DeleteTask(slug, taskID)
+}
+
+func (b *clientBackend) DeleteProject(slug string) error {
+	return b.c.DeleteProject(slug)
 }

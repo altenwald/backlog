@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -208,4 +209,17 @@ func ShowNewProjectDialog(parent fyne.Window, onSave func(slug, name, desc strin
 
 	d.Resize(fyne.NewSize(580, 420))
 	d.Show()
+}
+
+func ShowDeleteProjectDialog(parent fyne.Window, projectName, projectSlug string, onConfirm func()) {
+	displayName := projectName
+	if displayName == "" {
+		displayName = projectSlug
+	}
+	msg := fmt.Sprintf("Are you sure you want to permanently delete project '%s' (%s) and ALL its tasks?\n\nThis action cannot be undone.", displayName, projectSlug)
+	dialog.ShowConfirm("Delete Project", msg, func(confirmed bool) {
+		if confirmed && onConfirm != nil {
+			onConfirm()
+		}
+	}, parent)
 }

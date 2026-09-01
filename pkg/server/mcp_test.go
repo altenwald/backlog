@@ -194,4 +194,17 @@ func TestMCPServerWithClientBackend(t *testing.T) {
 	if err != nil || len(tasks) != 1 {
 		t.Fatalf("expected 1 task in store, got %d (err: %v)", len(tasks), err)
 	}
+
+	// Delete project via MCP through clientBackend
+	deleteMsg := []byte(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"delete_project","arguments":{"project":"testhttp"}}}`)
+	deleteResp := srv.HandleMessage(context.Background(), deleteMsg)
+	deleteRespBytes, _ := json.Marshal(deleteResp)
+	if !strings.Contains(string(deleteRespBytes), "deleted successfully") {
+		t.Fatalf("expected deleted successfully, got %s", string(deleteRespBytes))
+	}
+
+	// Verify it was deleted from store
+	if _, err := st.GetProject("testhttp"); err == nil {
+		t.Fatal("expected project 'testhttp' to be deleted from store")
+	}
 }

@@ -134,12 +134,39 @@ var projectNewCmd = &cobra.Command{
 	},
 }
 
+var projectDeleteCmd = &cobra.Command{
+	Use:     "delete <slug>",
+	Aliases: []string{"rm"},
+	Short:   "Delete a project and all its tasks",
+	Args:    cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		slug := strings.ToLower(args[0])
+		c := client.NewClient(flagAPIURL)
+		if c.IsServerRunning() {
+			if err := c.DeleteProject(slug); err != nil {
+				return err
+			}
+		} else {
+			st, err := store.NewStore(flagDataDir)
+			if err != nil {
+				return err
+			}
+			if err := st.DeleteProject(slug); err != nil {
+				return err
+			}
+		}
+		fmt.Printf("✔ Project '%s' deleted successfully.\n", slug)
+		return nil
+	},
+}
+
 func init() {
 	projectNewCmd.Flags().StringVarP(&newProjName, "name", "n", "", "Public display name of the project")
 	projectNewCmd.Flags().StringVarP(&newProjDesc, "desc", "d", "", "Project description")
 
 	projectCmd.AddCommand(projectUseCmd)
 	projectCmd.AddCommand(projectNewCmd)
+	projectCmd.AddCommand(projectDeleteCmd)
 
 	RootCmd.AddCommand(projectsCmd)
 	RootCmd.AddCommand(projectCmd)

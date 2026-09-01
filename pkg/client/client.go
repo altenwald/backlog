@@ -296,3 +296,20 @@ func (c *Client) DeleteTask(projectSlug, taskID string) error {
 	}
 	return nil
 }
+
+func (c *Client) DeleteProject(slug string) error {
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/projects/%s", c.baseURL, url.PathEscape(slug)), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server error: %s", resp.Status)
+	}
+	return nil
+}

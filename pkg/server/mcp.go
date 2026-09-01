@@ -209,6 +209,28 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 		},
 	)
 
+	// Tool: delete_project
+	s.AddTool(
+		mcp.NewTool(
+			"delete_project",
+			mcp.WithDescription("Permanently delete a project and all its tasks from Backlog."),
+			mcp.WithString("project", mcp.Description("Unique identifier slug of the project to delete (e.g. 'test')"), mcp.Required()),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			slug := req.GetString("project", "")
+			if slug == "" {
+				slug = req.GetString("slug", "")
+			}
+			if slug == "" {
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
+			}
+			if err := be.DeleteProject(slug); err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Project '%s' deleted successfully", slug)), nil
+		},
+	)
+
 	// Tool: list_tasks
 	s.AddTool(
 		mcp.NewTool(

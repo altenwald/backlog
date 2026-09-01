@@ -37,6 +37,7 @@ func (h *APIHandler) RegisterRoutes(r chi.Router) {
 			r.Post("/tasks/{id}/done", h.completeTask)
 			r.Post("/tasks/{id}/assign", h.assignTask)
 			r.Delete("/tasks/{id}", h.deleteTask)
+			r.Delete("/", h.deleteProject)
 		})
 	})
 }
@@ -135,6 +136,15 @@ func (h *APIHandler) getProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, p)
+}
+
+func (h *APIHandler) deleteProject(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	if err := h.store.DeleteProject(slug); err != nil {
+		errorResponse(w, http.StatusNotFound, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"message": "project deleted", "slug": slug})
 }
 
 func (h *APIHandler) getSummary(w http.ResponseWriter, r *http.Request) {

@@ -24,6 +24,7 @@ const (
 	EventTaskDeleted     EventType = "task_deleted"
 	EventProjectCreated  EventType = "project_created"
 	EventProjectSelected EventType = "project_selected"
+	EventProjectDeleted  EventType = "project_deleted"
 )
 
 type Event struct {
@@ -256,6 +257,43 @@ func (s *Store) CreateProject(slug, name, description string) (*model.Project, e
 		ProjectSlug: slug,
 	})
 	return p, nil
+}
+
+func (s *Store) DeleteProject(slug string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	if slug == "" {
+		return errors.New("project slug cannot be empty")
+	}
+
+	if _, exists := s.projects[slug]; !exists {
+		return fmt.Errorf("project '%s' not found", slug)
+	}
+
+	delete(s.projects, slug)
+
+	// Remove JSON file on disk
+	filePath := filepath.Join(s.dataDir, "projects", slug+".json")
+	_ = os.Remove(filePath)
+
+	// If the deleted project was active, pick another project or clear
+	if s.config.ActiveProject == slug {
+		newActive := ""
+		for otherSlug := range s.projects {
+			newActive = otherSlug
+			break
+		}
+		s.config.ActiveProject = newActive
+		_ = s.saveConfig()
+	}
+
+	go s.notify(Event{
+		Type:        EventProjectDeleted,
+		ProjectSlug: slug,
+	})
+	return nil
 }
 
 func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.Task, error) {

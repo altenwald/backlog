@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/store"
@@ -88,6 +89,22 @@ func (ba *BacklogApp) buildUI() {
 	})
 	newProjectBtn.Importance = widget.LowImportance
 
+	deleteProjectBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
+		activeSlug := ba.store.GetActiveProjectSlug()
+		if activeSlug == "" {
+			return
+		}
+		p, err := ba.store.GetProject(activeSlug)
+		pName := activeSlug
+		if err == nil && p != nil {
+			pName = p.Name
+		}
+		ShowDeleteProjectDialog(ba.window, pName, activeSlug, func() {
+			_ = ba.store.DeleteProject(activeSlug)
+		})
+	})
+	deleteProjectBtn.Importance = widget.DangerImportance
+
 	addTaskBtn := widget.NewButton("➕ New Task", func() {
 		ba.showAddTask()
 	})
@@ -97,6 +114,7 @@ func (ba *BacklogApp) buildUI() {
 		widget.NewLabelWithStyle("Project:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		container.NewGridWrap(fyne.NewSize(150, 36), ba.projectSelect),
 		newProjectBtn,
+		deleteProjectBtn,
 	)
 
 	header := container.NewBorder(nil, nil, headerLeft, addTaskBtn)
