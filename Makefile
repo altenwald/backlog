@@ -2,18 +2,20 @@
 
 APP_NAME = Backlog
 BUNDLE_DIR = bin/$(APP_NAME).app
+MIN_MACOS_VER = 11.0
+MACOS_ENV = CGO_ENABLED=1 GOOS=darwin MACOSX_DEPLOYMENT_TARGET=$(MIN_MACOS_VER) CGO_CFLAGS="-mmacosx-version-min=$(MIN_MACOS_VER)" CGO_LDFLAGS="-mmacosx-version-min=$(MIN_MACOS_VER)"
 
 build:
-	go build -o bin/backlog ./cmd/backlog
+	$(MACOS_ENV) go build -o bin/backlog ./cmd/backlog
 
 test:
 	go test -v ./...
 
 bundle:
-	@echo "Building Universal binary (arm64 + amd64)..."
+	@echo "Building Universal binary for macOS $(MIN_MACOS_VER)+ (arm64 + amd64)..."
 	@mkdir -p bin
-	@CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o bin/backlog_arm64 ./cmd/backlog
-	@CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -o bin/backlog_amd64 ./cmd/backlog
+	@$(MACOS_ENV) GOARCH=arm64 go build -o bin/backlog_arm64 ./cmd/backlog
+	@$(MACOS_ENV) GOARCH=amd64 go build -o bin/backlog_amd64 ./cmd/backlog
 	@lipo -create -output bin/backlog bin/backlog_amd64 bin/backlog_arm64
 	@rm -f bin/backlog_arm64 bin/backlog_amd64
 	@echo "Bundling $(BUNDLE_DIR)..."
@@ -40,12 +42,12 @@ bundle:
 		'    <key>CFBundleShortVersionString</key>' \
 		'    <string>1.0.0</string>' \
 		'    <key>LSMinimumSystemVersion</key>' \
-		'    <string>11.0</string>' \
+		'    <string>$(MIN_MACOS_VER)</string>' \
 		'    <key>NSHighResolutionCapable</key>' \
 		'    <true/>' \
 		'</dict>' \
 		'</plist>' > $(BUNDLE_DIR)/Contents/Info.plist
-	@echo "✔ Universal $(BUNDLE_DIR) created! (Apple Silicon + Intel)"
+	@echo "✔ Universal $(BUNDLE_DIR) created for macOS $(MIN_MACOS_VER)+!"
 	@file $(BUNDLE_DIR)/Contents/MacOS/backlog
 
 clean:
