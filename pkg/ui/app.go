@@ -1,6 +1,8 @@
 package ui
 
 import (
+	_ "embed"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
@@ -8,6 +10,9 @@ import (
 	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/store"
 )
+
+//go:embed assets/icon.png
+var appIconBytes []byte
 
 type BacklogApp struct {
 	fyneApp       fyne.App
@@ -27,7 +32,11 @@ type BacklogApp struct {
 
 func NewBacklogApp(st *store.Store) *BacklogApp {
 	a := app.NewWithID("com.altenwald.backlog")
+	iconRes := fyne.NewStaticResource("icon.png", appIconBytes)
+	a.SetIcon(iconRes)
+
 	w := a.NewWindow("Backlog")
+	w.SetIcon(iconRes)
 	w.Resize(fyne.NewSize(1080, 720))
 
 	bApp := &BacklogApp{

@@ -12,6 +12,7 @@ var (
 	flagAPIURL  string
 	flagDataDir string
 	flagPort    int
+	flagDaemon  bool
 )
 
 var RootCmd = &cobra.Command{
@@ -36,6 +37,7 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&flagAPIURL, "api-url", "http://127.0.0.1:8484", "Backlog daemon REST API URL")
 	RootCmd.PersistentFlags().StringVar(&flagDataDir, "data-dir", "", "Data directory path (defaults to ~/.config/backlog)")
 	RootCmd.PersistentFlags().IntVar(&flagPort, "port", 8484, "Local port for REST API and MCP SSE")
+	RootCmd.PersistentFlags().BoolVarP(&flagDaemon, "daemon", "d", false, "Run Backlog in background detached from terminal")
 }
 
 func resolveProject(cliProject string) string {

@@ -26,6 +26,10 @@ func runStartApp(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error initializing storage: %w", err)
 	}
 
+	if flagDaemon {
+		return spawnDaemon(st.GetDataDir())
+	}
+
 	if err := acquireInstanceLock(st.GetDataDir()); err != nil {
 		return err
 	}
