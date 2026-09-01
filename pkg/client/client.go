@@ -78,6 +78,22 @@ func (c *Client) GetActiveProject() (*ProjectInfo, error) {
 	return &p, err
 }
 
+func (c *Client) GetProject(slug string) (*model.Project, error) {
+	resp, err := c.httpClient.Get(fmt.Sprintf("%s/api/projects/%s", c.baseURL, url.PathEscape(slug)))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error: %s", resp.Status)
+	}
+
+	var p model.Project
+	err = json.NewDecoder(resp.Body).Decode(&p)
+	return &p, err
+}
+
 func (c *Client) SetActiveProject(slug string) error {
 	body, _ := json.Marshal(map[string]string{"slug": slug})
 	resp, err := c.httpClient.Post(c.baseURL+"/api/projects/active", "application/json", bytes.NewReader(body))
@@ -199,6 +215,29 @@ func (c *Client) AddTask(projectSlug string, task model.Task) (*model.Task, erro
 	var created model.Task
 	err = json.NewDecoder(resp.Body).Decode(&created)
 	return &created, err
+}
+
+func (c *Client) UpdateTask(projectSlug string, task model.Task) (*model.Task, error) {
+	body, _ := json.Marshal(task)
+	u := fmt.Sprintf("%s/api/projects/%s/tasks/%s", c.baseURL, url.PathEscape(projectSlug), url.PathEscape(task.ID))
+	req, err := http.NewRequest(http.MethodPut, u, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error: %s", resp.Status)
+	}
+
+	var updated model.Task
+	err = json.NewDecoder(resp.Body).Decode(&updated)
+	return &updated, err
 }
 
 func (c *Client) CompleteTask(projectSlug, taskID string, done bool, resolution ...string) (*model.Task, error) {

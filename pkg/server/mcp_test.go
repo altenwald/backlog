@@ -3,11 +3,16 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/altenwald/backlog/pkg/client"
 	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/store"
+	"github.com/go-chi/chi/v5"
 )
 
 func TestMCPServerTools(t *testing.T) {
@@ -124,5 +129,69 @@ func TestMCPServerTools(t *testing.T) {
 	}
 	if initResp.Result.Instructions == "" {
 		t.Fatal("expected instructions in initialize response")
+	}
+
+	// 6. Test create_project tool
+	createMsg := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_project","arguments":{"slug":"newproj","name":"New Project","description":"Desc"}}}`)
+	createResp := srv.HandleMessage(context.Background(), createMsg)
+	createRespBytes, err := json.Marshal(createResp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(createRespBytes), "created successfully") {
+		t.Fatalf("expected created successfully, got %s", string(createRespBytes))
+	}
+}
+
+func TestMCPServerWithClientBackend(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "backlog-mcp-client-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	st, err := store.NewStore(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := chi.NewRouter()
+	api := NewAPIHandler(st)
+	api.RegisterRoutes(r)
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusOK, map[string]any{"status": "ok"})
+	})
+
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c := client.NewClient(ts.URL)
+	if !c.IsServerRunning() {
+		t.Fatal("expected test server to be running")
+	}
+
+	be := NewClientBackend(c)
+	srv := NewMCPServerWithBackend(be)
+
+	// Create project via MCP through clientBackend
+	createMsg := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"create_project","arguments":{"slug":"testhttp","name":"HTTP Test","description":"Testing HTTP MCP"}}}`)
+	createResp := srv.HandleMessage(context.Background(), createMsg)
+	createRespBytes, _ := json.Marshal(createResp)
+	if !strings.Contains(string(createRespBytes), "created successfully") {
+		t.Fatalf("expected created successfully, got %s", string(createRespBytes))
+	}
+
+	// Add task via MCP through clientBackend
+	addMsg := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"add_task","arguments":{"project":"testhttp","title":"Task via HTTP MCP","tier":1,"size":"S"}}}`)
+	addResp := srv.HandleMessage(context.Background(), addMsg)
+	addRespBytes, _ := json.Marshal(addResp)
+	if !strings.Contains(string(addRespBytes), "Task created in 'testhttp'") {
+		t.Fatalf("expected task created, got %s", string(addRespBytes))
+	}
+
+	// Verify it was persisted to in-memory store and disk
+	tasks, err := st.ListTasks("testhttp", model.TaskFilter{})
+	if err != nil || len(tasks) != 1 {
+		t.Fatalf("expected 1 task in store, got %d (err: %v)", len(tasks), err)
 	}
 }

@@ -48,6 +48,10 @@ Follow this standard protocol when interacting with Backlog:
    - Always inform the user when claiming a task, report test coverage results, and report completion with the commit hash and resolution summary.`
 
 func NewMCPServer(st *store.Store) *server.MCPServer {
+	return NewMCPServerWithBackend(NewStoreBackend(st))
+}
+
+func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 	s := server.NewMCPServer(
 		"backlog",
 		"1.0.0",
@@ -81,7 +85,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			agent := req.Params.Arguments["agent"]
 			project := req.Params.Arguments["project"]
 			if project == "" {
-				project = st.GetActiveProjectSlug()
+				project = be.GetActiveProjectSlug()
 			}
 
 			promptText := fmt.Sprintf(`Please perform the following workflow in Backlog:
@@ -136,31 +140,9 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithDescription("List all registered projects in Backlog with metrics, open tasks, points, and active status."),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			projects := st.ListProjects()
-			active := st.GetActiveProjectSlug()
-
-			type ProjectItem struct {
-				Slug        string `json:"slug"`
-				Name        string `json:"name"`
-				Active      bool   `json:"active"`
-				OpenTasks   int    `json:"open_tasks"`
-				TotalTasks  int    `json:"total_tasks"`
-				OpenPoints  int    `json:"open_points"`
-				TotalPoints int    `json:"total_points"`
-			}
-
-			var items []ProjectItem
-			for _, p := range projects {
-				sum, _ := st.GetSummary(p.Slug)
-				items = append(items, ProjectItem{
-					Slug:        p.Slug,
-					Name:        p.Name,
-					Active:      p.Slug == active,
-					OpenTasks:   sum.OpenTasks,
-					TotalTasks:  sum.TotalTasks,
-					OpenPoints:  sum.OpenPoints,
-					TotalPoints: sum.TotalPoints,
-				})
+			items, err := be.ListProjects()
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
 			}
 
 			data, _ := json.MarshalIndent(items, "", "  ")
@@ -175,17 +157,9 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			mcp.WithDescription("Get the currently active project in the GUI and server."),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			active := st.GetActiveProjectSlug()
-			p, err := st.GetProject(active)
+			resp, err := be.GetActiveProject()
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
-			}
-			sum, _ := st.GetSummary(active)
-			resp := map[string]any{
-				"active_project": active,
-				"name":           p.Name,
-				"description":    p.Description,
-				"summary":        sum,
 			}
 			data, _ := json.MarshalIndent(resp, "", "  ")
 			return mcp.NewToolResultText(string(data)), nil
@@ -204,10 +178,34 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			if project == "" {
 				return mcp.NewToolResultError("parameter 'project' is required"), nil
 			}
-			if err := st.SetActiveProject(project); err != nil {
+			if err := be.SetActiveProject(project); err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			return mcp.NewToolResultText(fmt.Sprintf("Active project switched to '%s'", project)), nil
+		},
+	)
+
+	// Tool: create_project
+	s.AddTool(
+		mcp.NewTool(
+			"create_project",
+			mcp.WithDescription("Create a new project in Backlog."),
+			mcp.WithString("slug", mcp.Description("Unique identifier slug for the project (e.g. 'my-app')"), mcp.Required()),
+			mcp.WithString("name", mcp.Description("Human-readable display name (e.g. 'My Application')")),
+			mcp.WithString("description", mcp.Description("Project description or notes")),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			slug := req.GetString("slug", "")
+			if slug == "" {
+				return mcp.NewToolResultError("parameter 'slug' is required"), nil
+			}
+			name := req.GetString("name", "")
+			desc := req.GetString("description", "")
+			p, err := be.CreateProject(slug, name, desc)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Project '%s' (%s) created successfully", p.Slug, p.Name)), nil
 		},
 	)
 
@@ -227,7 +225,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			project := req.GetString("project", "")
 			if project == "" {
-				project = st.GetActiveProjectSlug()
+				project = be.GetActiveProjectSlug()
 			}
 
 			filter := model.TaskFilter{}
@@ -255,7 +253,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 				filter.Assignee = &assigneeVal
 			}
 
-			tasks, err := st.ListTasks(project, filter)
+			tasks, err := be.ListTasks(project, filter)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -275,10 +273,10 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			project := req.GetString("project", "")
 			if project == "" {
-				project = st.GetActiveProjectSlug()
+				project = be.GetActiveProjectSlug()
 			}
 
-			sum, err := st.GetSummary(project)
+			sum, err := be.GetSummary(project)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -299,7 +297,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			project := req.GetString("project", "")
 			if project == "" {
-				project = st.GetActiveProjectSlug()
+				project = be.GetActiveProjectSlug()
 			}
 
 			limit := req.GetInt("limit", 5)
@@ -307,7 +305,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 				limit = 5
 			}
 
-			tasks, err := st.GetTopPriorities(project, limit)
+			tasks, err := be.GetTopPriorities(project, limit)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -340,7 +338,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 
 			project := req.GetString("project", "")
 			if project == "" {
-				project = st.GetActiveProjectSlug()
+				project = be.GetActiveProjectSlug()
 			}
 
 			desc := req.GetString("description", "")
@@ -356,7 +354,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 				tier = model.Tier(tierVal)
 			}
 
-			task, err := st.AddTask(project, model.Task{
+			task, err := be.AddTask(project, model.Task{
 				Title:       title,
 				Description: desc,
 				Group:       group,
@@ -370,7 +368,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			sum, _ := st.GetSummary(project)
+			sum, _ := be.GetSummary(project)
 			return mcp.NewToolResultText(fmt.Sprintf("✔ Task created in '%s': #%s [%s] [%s] %s\nProject status: %d/%d open (%d pts)",
 				project, task.ID, task.Size, task.Tier.ShortLabel(), task.Title, sum.OpenTasks, sum.TotalTasks, sum.OpenPoints)), nil
 		},
@@ -402,10 +400,10 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			assignee := req.GetString("assignee", "")
 			project := req.GetString("project", "")
 			if project == "" {
-				project = st.GetActiveProjectSlug()
+				project = be.GetActiveProjectSlug()
 			}
 
-			task, err := st.AssignTask(project, taskID, assignee)
+			task, err := be.AssignTask(project, taskID, assignee)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -444,7 +442,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 
 			project := req.GetString("project", "")
 			if project == "" {
-				project = st.GetActiveProjectSlug()
+				project = be.GetActiveProjectSlug()
 			}
 
 			done := true
@@ -456,15 +454,15 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 			resolution := req.GetString("resolution", "")
 
 			if aVal := req.GetString("assignee", ""); aVal != "" {
-				_, _ = st.AssignTask(project, taskID, aVal)
+				_, _ = be.AssignTask(project, taskID, aVal)
 			}
 
-			task, err := st.CompleteTask(project, taskID, done, resolution)
+			task, err := be.CompleteTask(project, taskID, done, resolution)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			sum, _ := st.GetSummary(project)
+			sum, _ := be.GetSummary(project)
 			statusStr := "completed"
 			if !done {
 				statusStr = "marked as pending"
@@ -510,7 +508,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 
 			project := req.GetString("project", "")
 			if project == "" {
-				project = st.GetActiveProjectSlug()
+				project = be.GetActiveProjectSlug()
 			}
 
 			update := model.Task{ID: taskID}
@@ -539,7 +537,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 				update.Assignee = assignVal
 			}
 
-			task, err := st.UpdateTask(project, update)
+			task, err := be.UpdateTask(project, update)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -572,10 +570,10 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 
 			project := req.GetString("project", "")
 			if project == "" {
-				project = st.GetActiveProjectSlug()
+				project = be.GetActiveProjectSlug()
 			}
 
-			if err := st.DeleteTask(project, taskID); err != nil {
+			if err := be.DeleteTask(project, taskID); err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 

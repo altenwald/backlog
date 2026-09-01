@@ -27,6 +27,7 @@ func (h *APIHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/projects/active", h.setActiveProject)
 
 		r.Route("/projects/{slug}", func(r chi.Router) {
+			r.Get("/", h.getProject)
 			r.Get("/summary", h.getSummary)
 			r.Get("/top", h.getTopPriorities)
 			r.Get("/tasks", h.listTasks)
@@ -124,6 +125,16 @@ func (h *APIHandler) setActiveProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "active project updated", "active_project": body.Slug})
+}
+
+func (h *APIHandler) getProject(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	p, err := h.store.GetProject(slug)
+	if err != nil {
+		errorResponse(w, http.StatusNotFound, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, p)
 }
 
 func (h *APIHandler) getSummary(w http.ResponseWriter, r *http.Request) {
