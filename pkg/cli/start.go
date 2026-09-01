@@ -26,6 +26,10 @@ func runStartApp(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error initializing storage: %w", err)
 	}
 
+	if err := acquireInstanceLock(st.GetDataDir()); err != nil {
+		return err
+	}
+
 	if proj := resolveProject(flagProject); proj != "" {
 		_ = st.SetActiveProject(proj)
 	}

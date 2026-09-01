@@ -86,6 +86,12 @@ func NewStore(dataDir string) (*Store, error) {
 	return s, nil
 }
 
+func (s *Store) GetDataDir() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.dataDir
+}
+
 func (s *Store) loadAll() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
