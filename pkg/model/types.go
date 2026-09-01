@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 )
@@ -28,34 +29,34 @@ func (s Size) Points() int {
 	case "XL":
 		return 8
 	default:
-		return 1
+		return 3
 	}
 }
 
 type Tier int
 
 const (
-	Tier1 Tier = 1 // Blocker: real bug or core function without any path
-	Tier2 Tier = 2 // Important: solid business, doesn't block today
-	Tier3 Tier = 3 // Visual debt: consistency, zero functional impact
-	Tier4 Tier = 4 // Internal: internal quality, invisible
-	Tier5 Tier = 5 // Future: out of scope for full MVP
+	Tier1 Tier = 1 // Blocker
+	Tier2 Tier = 2 // Important
+	Tier3 Tier = 3 // Visual debt
+	Tier4 Tier = 4 // Internal
+	Tier5 Tier = 5 // Future
 )
 
 func (t Tier) Label() string {
 	switch t {
 	case Tier1:
-		return "T1 · Blocker"
+		return "Blocker (T1)"
 	case Tier2:
-		return "T2 · Important"
+		return "Important (T2)"
 	case Tier3:
-		return "T3 · Visual debt"
+		return "Visual debt (T3)"
 	case Tier4:
-		return "T4 · Internal"
+		return "Internal (T4)"
 	case Tier5:
-		return "T5 · Future"
+		return "Future (T5)"
 	default:
-		return "T3"
+		return "Visual debt (T3)"
 	}
 }
 
@@ -77,19 +78,40 @@ func (t Tier) ShortLabel() string {
 }
 
 type Task struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	Group       string     `json:"group"` // e.g. "Monetization", "Domains", "Infrastructure", "Bugs", etc.
-	Size        Size       `json:"size"`
-	Tier        Tier       `json:"tier"`
-	Done        bool       `json:"done"`
-	DoneAt      *time.Time `json:"done_at,omitempty"`
-	Assignee    string     `json:"assignee,omitempty"`   // e.g. "claude", "antigravity", "manuel"
-	Resolution  string     `json:"resolution,omitempty"` // Summary of implementation details and resolution
-	Tag         string     `json:"tag,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID           string     `json:"id"`
+	Title        string     `json:"title"`
+	Description  string     `json:"description"`
+	Group        string     `json:"group"` // e.g. "Monetization", "Domains", "Infrastructure", "Bugs", etc.
+	Size         Size       `json:"size"`
+	Tier         Tier       `json:"tier"`
+	Done         bool       `json:"done"`
+	Assignee     string     `json:"assignee,omitempty"`      // e.g. "claude", "antigravity", "manuel"
+	Resolution   string     `json:"resolution,omitempty"`    // Summary of implementation details and resolution
+	Tag          string     `json:"tag,omitempty"`
+	InsertedAt   time.Time  `json:"inserted_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	TerminatedAt *time.Time `json:"terminated_at,omitempty"`
+}
+
+func (t *Task) UnmarshalJSON(data []byte) error {
+	type Alias Task
+	aux := &struct {
+		*Alias
+		LegacyCreatedAt *time.Time `json:"created_at"`
+		LegacyDoneAt    *time.Time `json:"done_at"`
+	}{
+		Alias: (*Alias)(t),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if t.InsertedAt.IsZero() && aux.LegacyCreatedAt != nil {
+		t.InsertedAt = *aux.LegacyCreatedAt
+	}
+	if t.TerminatedAt == nil && aux.LegacyDoneAt != nil {
+		t.TerminatedAt = aux.LegacyDoneAt
+	}
+	return nil
 }
 
 type Project struct {
@@ -97,8 +119,25 @@ type Project struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	Tasks       []Task    `json:"tasks"`
-	CreatedAt   time.Time `json:"created_at"`
+	InsertedAt  time.Time `json:"inserted_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func (p *Project) UnmarshalJSON(data []byte) error {
+	type Alias Project
+	aux := &struct {
+		*Alias
+		LegacyCreatedAt *time.Time `json:"created_at"`
+	}{
+		Alias: (*Alias)(p),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if p.InsertedAt.IsZero() && aux.LegacyCreatedAt != nil {
+		p.InsertedAt = *aux.LegacyCreatedAt
+	}
+	return nil
 }
 
 type TaskFilter struct {

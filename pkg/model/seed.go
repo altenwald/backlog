@@ -11,7 +11,7 @@ func DefaultSeedProjects() []*Project {
 		Slug:        "dymmer",
 		Name:        "Dymmer",
 		Description: "Cloud platform for managing domains, cloud projects, DNS zones, and mail services.",
-		CreatedAt:   now,
+		InsertedAt:   now,
 		UpdatedAt:   now,
 		Tasks: []Task{
 			{
@@ -23,7 +23,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -35,7 +35,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier1,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -47,7 +47,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier1,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -59,7 +59,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -71,7 +71,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -83,7 +83,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -95,7 +95,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -107,7 +107,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -119,7 +119,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -131,7 +131,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -143,7 +143,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -155,7 +155,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier5,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -167,7 +167,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -179,7 +179,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -191,7 +191,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -203,7 +203,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -215,7 +215,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -227,7 +227,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -239,7 +239,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -251,7 +251,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier1,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -263,7 +263,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -275,7 +275,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -287,7 +287,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -299,7 +299,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -311,7 +311,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -323,7 +323,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -335,7 +335,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -347,7 +347,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -359,7 +359,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -371,7 +371,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -383,7 +383,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -395,7 +395,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -407,7 +407,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -419,7 +419,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -431,7 +431,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -443,7 +443,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -455,7 +455,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -467,7 +467,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -479,7 +479,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -491,7 +491,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -503,7 +503,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -515,7 +515,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -527,7 +527,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -539,7 +539,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -551,7 +551,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -563,7 +563,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -575,7 +575,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier5,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -587,7 +587,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -599,7 +599,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -611,7 +611,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -623,7 +623,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -635,7 +635,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -647,7 +647,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -659,7 +659,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -671,7 +671,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -683,7 +683,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -695,7 +695,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier1,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -707,7 +707,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -719,7 +719,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -731,7 +731,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -743,7 +743,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -755,7 +755,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -767,7 +767,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -779,7 +779,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -791,7 +791,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -803,7 +803,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -815,7 +815,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -827,7 +827,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -839,7 +839,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -851,7 +851,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier5,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -863,7 +863,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier5,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -875,7 +875,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -887,7 +887,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -899,7 +899,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -911,7 +911,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -923,7 +923,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -935,7 +935,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier5,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -947,7 +947,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -959,7 +959,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -971,7 +971,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -983,7 +983,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -995,7 +995,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1007,7 +1007,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1019,7 +1019,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1031,7 +1031,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1043,7 +1043,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1055,7 +1055,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1067,7 +1067,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier5,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1079,7 +1079,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier5,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1091,7 +1091,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1103,7 +1103,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1115,7 +1115,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1127,7 +1127,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1139,7 +1139,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1151,7 +1151,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1163,7 +1163,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1175,7 +1175,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1187,7 +1187,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1199,7 +1199,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1211,7 +1211,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1223,7 +1223,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1235,7 +1235,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1247,7 +1247,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1259,7 +1259,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier5,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1271,7 +1271,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1283,7 +1283,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1295,7 +1295,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1307,7 +1307,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1319,7 +1319,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1331,7 +1331,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1343,7 +1343,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1355,7 +1355,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1367,7 +1367,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier4,
 				Done:        false,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1379,7 +1379,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1391,7 +1391,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1403,7 +1403,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1415,7 +1415,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1427,7 +1427,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1439,7 +1439,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        true,
 				Tag:         "",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 		},
@@ -1449,7 +1449,7 @@ func DefaultSeedProjects() []*Project {
 		Slug:        "conta",
 		Name:        "Conta",
 		Description: "Double-entry bookkeeping, invoicing, and bank reconciliation engine built with Elixir, Commanded, and EventStore.",
-		CreatedAt:   now,
+		InsertedAt:   now,
 		UpdatedAt:   now,
 		Tasks: []Task{
 			{
@@ -1461,7 +1461,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier1,
 				Done:        false,
 				Tag:         "EventStore",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1473,7 +1473,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "Ecto",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1485,7 +1485,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "Lua",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1497,7 +1497,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "Telegram",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1509,7 +1509,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier2,
 				Done:        false,
 				Tag:         "REST",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1521,7 +1521,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "i18n",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 			{
@@ -1533,7 +1533,7 @@ func DefaultSeedProjects() []*Project {
 				Tier:        Tier3,
 				Done:        false,
 				Tag:         "Assets",
-				CreatedAt:   now,
+				InsertedAt:   now,
 				UpdatedAt:   now,
 			},
 		},

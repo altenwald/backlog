@@ -112,11 +112,11 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 
 	textCol := container.NewVBox(title)
 
-	// Collapsible Markdown Description and Resolution
+	// Collapsible Markdown Description, Resolution, and Timestamps
 	descTrimmed := strings.TrimSpace(task.Description)
 	resTrimmed := strings.TrimSpace(task.Resolution)
 
-	if descTrimmed != "" || resTrimmed != "" {
+	if descTrimmed != "" || resTrimmed != "" || !task.InsertedAt.IsZero() {
 		detailBox := container.NewVBox()
 
 		if descTrimmed != "" {
@@ -132,6 +132,23 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 
 			resBox := container.NewStack(resBg, container.NewPadded(container.NewVBox(resHeading, resContent)))
 			detailBox.Add(resBox)
+		}
+
+		// Timestamps metadata
+		var timeParts []string
+		if !task.InsertedAt.IsZero() {
+			timeParts = append(timeParts, fmt.Sprintf("Created: %s", task.InsertedAt.Format("2006-01-02 15:04")))
+		}
+		if !task.UpdatedAt.IsZero() && !task.UpdatedAt.Equal(task.InsertedAt) {
+			timeParts = append(timeParts, fmt.Sprintf("Updated: %s", task.UpdatedAt.Format("2006-01-02 15:04")))
+		}
+		if task.TerminatedAt != nil && !task.TerminatedAt.IsZero() {
+			timeParts = append(timeParts, fmt.Sprintf("Completed: %s", task.TerminatedAt.Format("2006-01-02 15:04")))
+		}
+
+		if len(timeParts) > 0 {
+			timeLabel := widget.NewLabelWithStyle(strings.Join(timeParts, "  ·  "), fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+			detailBox.Add(timeLabel)
 		}
 
 		mdContainer := container.NewPadded(detailBox)
@@ -193,7 +210,7 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	})
 	deleteBtn.Importance = widget.DangerImportance
 
-	// Ensure assignee, buttons and tags are flushed cleanly to the right edge
+	// Ensure assignee, buttons and tags are always flushed cleanly to the right edge
 	tagRowItems := []fyne.CanvasObject{layout.NewSpacer()}
 	if assigneeBadge != nil {
 		tagRowItems = append(tagRowItems, assigneeBadge)

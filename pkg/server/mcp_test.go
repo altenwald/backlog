@@ -41,6 +41,9 @@ func TestMCPServerTools(t *testing.T) {
 	if task.Assignee != "claude" {
 		t.Fatalf("expected assignee 'claude', got '%s'", task.Assignee)
 	}
+	if task.InsertedAt.IsZero() || task.UpdatedAt.IsZero() {
+		t.Fatal("expected InsertedAt and UpdatedAt to be set")
+	}
 
 	// 2. Assign task to antigravity
 	assigned, err := st.AssignTask("dymmer", task.ID, "antigravity")
@@ -69,8 +72,11 @@ func TestMCPServerTools(t *testing.T) {
 	if !completed.Done || completed.Resolution != "Implemented cleanly via commit xyz" {
 		t.Fatalf("expected done with resolution, got %+v", completed)
 	}
+	if completed.TerminatedAt == nil || completed.TerminatedAt.IsZero() {
+		t.Fatal("expected TerminatedAt to be set when completed")
+	}
 
-	// Verify JSON serialization includes assignee and resolution
+	// Verify JSON serialization includes inserted_at, updated_at, terminated_at, assignee and resolution
 	data, err := json.Marshal(completed)
 	if err != nil {
 		t.Fatal(err)
@@ -82,5 +88,14 @@ func TestMCPServerTools(t *testing.T) {
 	}
 	if m["resolution"] != "Implemented cleanly via commit xyz" {
 		t.Fatalf("JSON missing resolution field: %s", string(data))
+	}
+	if _, ok := m["inserted_at"]; !ok {
+		t.Fatalf("JSON missing inserted_at field: %s", string(data))
+	}
+	if _, ok := m["updated_at"]; !ok {
+		t.Fatalf("JSON missing updated_at field: %s", string(data))
+	}
+	if _, ok := m["terminated_at"]; !ok {
+		t.Fatalf("JSON missing terminated_at field: %s", string(data))
 	}
 }

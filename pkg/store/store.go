@@ -247,7 +247,7 @@ func (s *Store) CreateProject(slug, name, description string) (*model.Project, e
 		Name:        name,
 		Description: description,
 		Tasks:       []model.Task{},
-		CreatedAt:   now,
+		InsertedAt:  now,
 		UpdatedAt:   now,
 	}
 	s.projects[slug] = p
@@ -264,8 +264,7 @@ func (s *Store) CreateProject(slug, name, description string) (*model.Project, e
 		Type:        EventProjectCreated,
 		ProjectSlug: slug,
 	})
-	copyProj := *p
-	return &copyProj, nil
+	return p, nil
 }
 
 func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.Task, error) {
@@ -423,7 +422,7 @@ func (s *Store) AddTask(projectSlug string, task model.Task) (*model.Task, error
 	}
 
 	now := time.Now()
-	task.CreatedAt = now
+	task.InsertedAt = now
 	task.UpdatedAt = now
 
 	// Auto-generate numeric ID if empty
@@ -472,12 +471,12 @@ func (s *Store) CompleteTask(projectSlug string, taskID string, done bool, resol
 			now := time.Now()
 			p.Tasks[i].UpdatedAt = now
 			if done {
-				p.Tasks[i].DoneAt = &now
+				p.Tasks[i].TerminatedAt = &now
 				if len(resolution) > 0 && resolution[0] != "" {
 					p.Tasks[i].Resolution = resolution[0]
 				}
 			} else {
-				p.Tasks[i].DoneAt = nil
+				p.Tasks[i].TerminatedAt = nil
 			}
 			p.UpdatedAt = now
 
