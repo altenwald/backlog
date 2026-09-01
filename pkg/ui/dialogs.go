@@ -174,10 +174,10 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 
 func ShowNewProjectDialog(parent fyne.Window, onSave func(slug, name, desc string)) {
 	slugEntry := widget.NewEntry()
-	slugEntry.SetPlaceHolder("unique slug (e.g. dymmer, conta)")
+	slugEntry.SetPlaceHolder("unique slug (e.g. my-project, web-app)")
 
 	nameEntry := widget.NewEntry()
-	nameEntry.SetPlaceHolder("Display Name (e.g. Dymmer, Conta)")
+	nameEntry.SetPlaceHolder("Display Name (e.g. My Project, Web App)")
 
 	descEntry := widget.NewMultiLineEntry()
 	descEntry.Wrapping = fyne.TextWrapWord

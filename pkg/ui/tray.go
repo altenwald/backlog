@@ -65,28 +65,24 @@ func (tm *TrayManager) Refresh() {
 	}
 
 	activeSlug := tm.store.GetActiveProjectSlug()
-	if activeSlug == "" {
-		activeSlug = "dymmer"
-		_ = tm.store.SetActiveProject("dymmer")
-	}
-
-	activeProject, err := tm.store.GetProject(activeSlug)
-	if err != nil || activeProject == nil {
-		return
-	}
-
-	summary, _ := tm.store.GetSummary(activeSlug)
-	openCount := 0
-	totalCount := 0
-	if summary != nil {
-		openCount = summary.OpenTasks
-		totalCount = summary.TotalTasks
-	}
-
-	// Update Menu bar title and template icon
 	systray.SetTemplateIcon(tm.iconBytes, tm.iconBytes)
-	systray.SetTitle(fmt.Sprintf(" %s %d/%d", activeProject.Name, openCount, totalCount))
-	systray.SetTooltip(fmt.Sprintf("Backlog — [%s] %d/%d pending tasks", activeProject.Name, openCount, totalCount))
+
+	if activeSlug != "" {
+		if activeProject, err := tm.store.GetProject(activeSlug); err == nil && activeProject != nil {
+			summary, _ := tm.store.GetSummary(activeSlug)
+			openCount := 0
+			totalCount := 0
+			if summary != nil {
+				openCount = summary.OpenTasks
+				totalCount = summary.TotalTasks
+			}
+			systray.SetTitle(fmt.Sprintf(" %s %d/%d", activeProject.Name, openCount, totalCount))
+			systray.SetTooltip(fmt.Sprintf("Backlog — [%s] %d/%d pending tasks", activeProject.Name, openCount, totalCount))
+		}
+	} else {
+		systray.SetTitle(" Backlog")
+		systray.SetTooltip("Backlog — Task & Priority Manager")
+	}
 
 	// Projects Submenu
 	projects := tm.store.ListProjects()

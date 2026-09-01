@@ -115,7 +115,7 @@ func (t *Task) UnmarshalJSON(data []byte) error {
 }
 
 type Project struct {
-	Slug        string    `json:"slug"` // "dymmer", "conta"
+	Slug        string    `json:"slug"` // e.g. "my-project"
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	Tasks       []Task    `json:"tasks"`

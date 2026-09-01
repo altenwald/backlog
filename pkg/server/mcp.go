@@ -197,7 +197,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 		mcp.NewTool(
 			"set_active_project",
 			mcp.WithDescription("Switch the active project focused in the GUI and System Tray."),
-			mcp.WithString("project", mcp.Description("Project slug to activate (e.g. 'dymmer', 'conta')"), mcp.Required()),
+			mcp.WithString("project", mcp.Description("Project slug to activate (e.g. 'my-project')"), mcp.Required()),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			project := req.GetString("project", "")

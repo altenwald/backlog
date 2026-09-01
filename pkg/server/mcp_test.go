@@ -27,8 +27,15 @@ func TestMCPServerTools(t *testing.T) {
 		t.Fatal("expected non-nil MCP server")
 	}
 
+	// 0. Create test project
+	_, err = st.CreateProject("testproj", "Test Project", "Testing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = st.SetActiveProject("testproj")
+
 	// 1. Add Task with assignee & resolution
-	task, err := st.AddTask("dymmer", model.Task{
+	task, err := st.AddTask("testproj", model.Task{
 		Title:       "Test Task MCP",
 		Description: "Test description",
 		Size:        model.SizeM,
@@ -47,7 +54,7 @@ func TestMCPServerTools(t *testing.T) {
 	}
 
 	// 2. Assign task to antigravity
-	assigned, err := st.AssignTask("dymmer", task.ID, "antigravity")
+	assigned, err := st.AssignTask("testproj", task.ID, "antigravity")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +64,7 @@ func TestMCPServerTools(t *testing.T) {
 
 	// 3. List tasks filtered by assignee
 	assigneeFilter := "antigravity"
-	tasks, err := st.ListTasks("dymmer", model.TaskFilter{Assignee: &assigneeFilter})
+	tasks, err := st.ListTasks("testproj", model.TaskFilter{Assignee: &assigneeFilter})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +73,7 @@ func TestMCPServerTools(t *testing.T) {
 	}
 
 	// 4. Complete task with resolution
-	completed, err := st.CompleteTask("dymmer", task.ID, true, "Implemented cleanly via commit xyz")
+	completed, err := st.CompleteTask("testproj", task.ID, true, "Implemented cleanly via commit xyz")
 	if err != nil {
 		t.Fatal(err)
 	}

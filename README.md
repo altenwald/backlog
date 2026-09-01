@@ -7,7 +7,7 @@
 ## Features
 
 * **System Tray / Menu Bar Resident Icon**:
-  * Displays active project and open task ratio at all times: `[Dymmer] 78/119`.
+  * Displays active project and open task ratio at all times: `[Project] 12/15`.
   * Quick-access context menu with **Top 5 highest priority tasks** (T1 -> T2).
   * Fast project switcher and direct shortcut to "+ New Task".
 * **Full Desktop GUI (Fyne)**:
@@ -19,10 +19,10 @@
     * `T4 · Internal` (Purple)
     * `T5 · Future` (Gray)
   * Real-time search query filtering.
-  * Tasks grouped cleanly by category (*Monetization*, *Domains*, *Bugs*, *Infrastructure*, etc.).
+  * Tasks grouped cleanly by category.
   * Single-click task completion with live recalculations.
 * **Multi-Project Support**:
-  * Isolate tasks and metrics across multiple independent projects (*Dymmer*, *Conta*, etc.).
+  * Isolate tasks and metrics across multiple independent projects (*Backend*, *Frontend*, etc.).
   * Select project via `--project` (`-p`) flag, `BACKLOG_PROJECT` environment variable, or GUI dropdown.
 * **Embedded Daemon with Live Reactivity**:
   * Central daemon runs on `127.0.0.1:8484`.
@@ -54,20 +54,20 @@ backlog
 # or explicitly:
 backlog start --port 8484
 ```
-* The app docks into your macOS/Linux/Windows System Tray with active project stats (`[Dymmer] 78/119`).
+* The app docks into your macOS/Linux/Windows System Tray with active project stats (`[Project] 12/15`).
 * Closing the main window keeps the application resident in the menu bar.
 
 ### 2. CLI Commands
 
 ```bash
 # Set default project for current shell session (optional)
-export BACKLOG_PROJECT=dymmer
+export BACKLOG_PROJECT=my-project
 
 # List open tasks (with optional filters)
 backlog list
 backlog list --tier 1
-backlog list -g "Monetization"
-backlog list -p conta --tier 2
+backlog list -g "Core"
+backlog list -p frontend --tier 2
 
 # Display metrics summary and points
 backlog summary
