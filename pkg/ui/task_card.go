@@ -61,14 +61,7 @@ func FormatAssignee(assignee string) string {
 		return ""
 	}
 	clean := strings.TrimPrefix(name, "@")
-	lower := strings.ToLower(clean)
-
-	icon := "👤"
-	if lower == "claude" || lower == "antigravity" || lower == "gemini" || lower == "gpt" || lower == "bot" || lower == "ai" || strings.Contains(lower, "bot") || strings.Contains(lower, "ai") {
-		icon = "🤖"
-	}
-
-	return fmt.Sprintf("%s @%s", icon, clean)
+	return "@" + clean
 }
 
 func MakeBadge(text string, bg color.Color, fg color.Color) fyne.CanvasObject {

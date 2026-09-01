@@ -88,23 +88,6 @@ func (tm *TrayManager) Refresh() {
 	systray.SetTitle(fmt.Sprintf(" %s %d/%d", activeProject.Name, openCount, totalCount))
 	systray.SetTooltip(fmt.Sprintf("Backlog — [%s] %d/%d pending tasks", activeProject.Name, openCount, totalCount))
 
-	// Top 5 Priorities
-	topTasks, _ := tm.store.GetTopPriorities(activeSlug, 5)
-	var topMenuItems []*fyne.MenuItem
-	if len(topTasks) == 0 {
-		topMenuItems = append(topMenuItems, fyne.NewMenuItem("✨ All caught up! No pending tasks", nil))
-	} else {
-		for i, t := range topTasks {
-			taskCopy := t
-			title := fmt.Sprintf("%d. [%s] [%s] %s", i+1, taskCopy.Size, taskCopy.Tier.ShortLabel(), taskCopy.Title)
-			item := fyne.NewMenuItem(title, func() {
-				tm.window.Show()
-				tm.window.RequestFocus()
-			})
-			topMenuItems = append(topMenuItems, item)
-		}
-	}
-
 	// Projects Submenu
 	projects := tm.store.ListProjects()
 	var projectMenuItems []*fyne.MenuItem
@@ -127,6 +110,11 @@ func (tm *TrayManager) Refresh() {
 	projectsSubmenu.ChildMenu = fyne.NewMenu("Projects", projectMenuItems...)
 
 	// Actions
+	openItem := fyne.NewMenuItem("🪟 Open Backlog", func() {
+		tm.window.Show()
+		tm.window.RequestFocus()
+	})
+
 	addItem := fyne.NewMenuItem("➕ New Task...", func() {
 		tm.window.Show()
 		tm.window.RequestFocus()
@@ -135,27 +123,19 @@ func (tm *TrayManager) Refresh() {
 		}
 	})
 
-	openItem := fyne.NewMenuItem("🪟 Open Backlog", func() {
-		tm.window.Show()
-		tm.window.RequestFocus()
-	})
-
 	// Set IsQuit to true to avoid duplicate localized system quit item
 	quitItem := fyne.NewMenuItem("Quit Backlog", func() {
 		tm.app.Quit()
 	})
 	quitItem.IsQuit = true
 
-	var menuItems []*fyne.MenuItem
-	menuItems = append(menuItems, topMenuItems...)
-	menuItems = append(menuItems,
-		fyne.NewMenuItemSeparator(),
-		projectsSubmenu,
-		addItem,
+	menuItems := []*fyne.MenuItem{
 		openItem,
+		addItem,
+		projectsSubmenu,
 		fyne.NewMenuItemSeparator(),
 		quitItem,
-	)
+	}
 
 	menu := fyne.NewMenu("Backlog", menuItems...)
 	desk.SetSystemTrayMenu(menu)

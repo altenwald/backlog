@@ -1,9 +1,6 @@
 package ui
 
 import (
-	"fmt"
-	"strings"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
@@ -19,15 +16,19 @@ type BacklogApp struct {
 	tray          *TrayManager
 	summaryBar    *SummaryBar
 	filterBar     *FilterBar
-	tasksList     *fyne.Container
 	projectSelect *widget.Select
 	currentFilter model.TaskFilter
+
+	tasksList      *widget.List
+	detailView     *TaskDetailView
+	displayedTasks []model.Task
+	selectedTaskID string
 }
 
 func NewBacklogApp(st *store.Store) *BacklogApp {
 	a := app.NewWithID("com.altenwald.backlog")
 	w := a.NewWindow("Backlog")
-	w.Resize(fyne.NewSize(980, 750))
+	w.Resize(fyne.NewSize(1080, 720))
 
 	bApp := &BacklogApp{
 		fyneApp: a,
@@ -85,26 +86,83 @@ func (ba *BacklogApp) buildUI() {
 
 	headerLeft := container.NewHBox(
 		widget.NewLabelWithStyle("Project:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		ba.projectSelect,
+		container.NewGridWrap(fyne.NewSize(150, 36), ba.projectSelect),
 		newProjectBtn,
 	)
 
 	header := container.NewBorder(nil, nil, headerLeft, addTaskBtn)
 
-	// Tasks container
-	ba.tasksList = container.NewVBox()
-	scroll := container.NewVScroll(container.NewPadded(ba.tasksList))
+	// Virtualized task list
+	ba.tasksList = widget.NewList(
+		func() int {
+			return len(ba.displayedTasks)
+		},
+		func() fyne.CanvasObject {
+			return NewTaskRowItem(func(taskID string, done bool) {
+				activeSlug := ba.store.GetActiveProjectSlug()
+				_, _ = ba.store.CompleteTask(activeSlug, taskID, done)
+			})
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			if id < 0 || id >= len(ba.displayedTasks) {
+				return
+			}
+			item := obj.(*TaskRowItem)
+			item.Bind(ba.displayedTasks[id])
+		},
+	)
 
-	topSection := container.NewVBox(
+	ba.tasksList.OnSelected = func(id widget.ListItemID) {
+		if id >= 0 && id < len(ba.displayedTasks) {
+			task := ba.displayedTasks[id]
+			ba.selectedTaskID = task.ID
+			ba.detailView.ShowTask(task)
+		}
+	}
+
+	// Left section (List pane)
+	leftHeader := container.NewVBox(
 		header,
 		widget.NewSeparator(),
 		ba.summaryBar.CanvasObject(),
+		widget.NewSeparator(),
 		ba.filterBar.CanvasObject(),
 		widget.NewSeparator(),
 	)
 
-	content := container.NewBorder(topSection, nil, nil, nil, scroll)
-	ba.window.SetContent(container.NewPadded(content))
+	leftPane := container.NewBorder(leftHeader, nil, nil, nil, ba.tasksList)
+
+	// Right section (Detail Inspector pane)
+	detailCallbacks := TaskDetailCallbacks{
+		OnToggleDone: func(taskID string, done bool) {
+			activeSlug := ba.store.GetActiveProjectSlug()
+			if updated, err := ba.store.CompleteTask(activeSlug, taskID, done); err == nil {
+				ba.detailView.ShowTask(*updated)
+			}
+		},
+		OnEdit: func(task model.Task) {
+			activeSlug := ba.store.GetActiveProjectSlug()
+			ShowEditTaskDialog(ba.window, task, func(updated model.Task) {
+				if saved, err := ba.store.UpdateTask(activeSlug, updated); err == nil {
+					ba.detailView.ShowTask(*saved)
+				}
+			})
+		},
+		OnDelete: func(taskID string) {
+			activeSlug := ba.store.GetActiveProjectSlug()
+			_ = ba.store.DeleteTask(activeSlug, taskID)
+			ba.selectedTaskID = ""
+			ba.detailView.Clear()
+		},
+	}
+	ba.detailView = NewTaskDetailView(detailCallbacks)
+	rightPane := container.NewPadded(ba.detailView.Container)
+
+	// Master-detail Split view
+	split := container.NewHSplit(leftPane, rightPane)
+	split.SetOffset(0.44)
+
+	ba.window.SetContent(split)
 
 	// Setup Tray
 	ba.tray = NewTrayManager(ba.fyneApp, ba.window, ba.store, func() {
@@ -117,7 +175,9 @@ func (ba *BacklogApp) buildUI() {
 func (ba *BacklogApp) showAddTask() {
 	activeSlug := ba.store.GetActiveProjectSlug()
 	ShowAddTaskDialog(ba.window, activeSlug, func(task model.Task) {
-		_, _ = ba.store.AddTask(activeSlug, task)
+		if added, err := ba.store.AddTask(activeSlug, task); err == nil {
+			ba.selectedTaskID = added.ID
+		}
 	})
 }
 
@@ -147,67 +207,33 @@ func (ba *BacklogApp) refreshTasks() {
 		return
 	}
 
-	ba.tasksList.Objects = nil
+	ba.displayedTasks = tasks
+	ba.tasksList.Refresh()
 
-	if len(tasks) == 0 {
-		emptyMsg := widget.NewLabelWithStyle("No tasks match the current filter.", fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
-		ba.tasksList.Add(container.NewPadded(emptyMsg))
-		ba.tasksList.Refresh()
+	if len(ba.displayedTasks) == 0 {
+		ba.selectedTaskID = ""
+		ba.detailView.Clear()
 		return
 	}
 
-	// Group tasks by category
-	groupsMap := make(map[string][]model.Task)
-	var groupOrder []string
-
-	for _, t := range tasks {
-		grp := t.Group
-		if grp == "" {
-			grp = "General"
-		}
-		if _, exists := groupsMap[grp]; !exists {
-			groupOrder = append(groupOrder, grp)
-		}
-		groupsMap[grp] = append(groupsMap[grp], t)
-	}
-
-	callbacks := TaskCardCallbacks{
-		OnToggleDone: func(taskID string, done bool) {
-			_, _ = ba.store.CompleteTask(activeSlug, taskID, done)
-		},
-		OnEdit: func(task model.Task) {
-			ShowEditTaskDialog(ba.window, task, func(updated model.Task) {
-				_, _ = ba.store.UpdateTask(activeSlug, updated)
-			})
-		},
-		OnDelete: func(taskID string) {
-			_ = ba.store.DeleteTask(activeSlug, taskID)
-		},
-	}
-
-	for _, grp := range groupOrder {
-		groupTasks := groupsMap[grp]
-		openInGroup := 0
-		for _, gt := range groupTasks {
-			if !gt.Done {
-				openInGroup++
+	selectedIndex := -1
+	if ba.selectedTaskID != "" {
+		for i, t := range ba.displayedTasks {
+			if t.ID == ba.selectedTaskID {
+				selectedIndex = i
+				ba.detailView.ShowTask(t)
+				break
 			}
 		}
-
-		groupHeader := widget.NewLabelWithStyle(
-			fmt.Sprintf("▼  %s (%d open / %d total)", strings.ToUpper(grp), openInGroup, len(groupTasks)),
-			fyne.TextAlignLeading,
-			fyne.TextStyle{Bold: true},
-		)
-		ba.tasksList.Add(groupHeader)
-
-		for _, t := range groupTasks {
-			ba.tasksList.Add(NewTaskRow(t, callbacks))
-		}
-		ba.tasksList.Add(widget.NewSeparator())
 	}
 
-	ba.tasksList.Refresh()
+	if selectedIndex >= 0 {
+		ba.tasksList.Select(selectedIndex)
+	} else {
+		ba.selectedTaskID = ba.displayedTasks[0].ID
+		ba.tasksList.Select(0)
+		ba.detailView.ShowTask(ba.displayedTasks[0])
+	}
 }
 
 func (ba *BacklogApp) refreshAll() {
@@ -225,7 +251,6 @@ func (ba *BacklogApp) refreshAll() {
 func (ba *BacklogApp) listenEvents() {
 	ch := ba.store.Subscribe()
 	for range ch {
-		// Run UI updates on main thread
 		ba.refreshAll()
 	}
 }

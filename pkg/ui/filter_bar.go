@@ -50,35 +50,35 @@ func NewFilterBar(onFilterChange func(filter model.TaskFilter)) *FilterBar {
 	})
 	btnAll.Importance = widget.HighImportance
 
-	btnT1 := widget.NewButton("T1 · Blocker", func() {
+	btnT1 := widget.NewButton("T1", func() {
 		t := model.Tier1
 		fb.currentTier = &t
 		fb.updateActiveButton(1)
 		fb.emit()
 	})
 
-	btnT2 := widget.NewButton("T2 · Important", func() {
+	btnT2 := widget.NewButton("T2", func() {
 		t := model.Tier2
 		fb.currentTier = &t
 		fb.updateActiveButton(2)
 		fb.emit()
 	})
 
-	btnT3 := widget.NewButton("T3 · Visual debt", func() {
+	btnT3 := widget.NewButton("T3", func() {
 		t := model.Tier3
 		fb.currentTier = &t
 		fb.updateActiveButton(3)
 		fb.emit()
 	})
 
-	btnT4 := widget.NewButton("T4 · Internal", func() {
+	btnT4 := widget.NewButton("T4", func() {
 		t := model.Tier4
 		fb.currentTier = &t
 		fb.updateActiveButton(4)
 		fb.emit()
 	})
 
-	btnT5 := widget.NewButton("T5 · Future", func() {
+	btnT5 := widget.NewButton("T5", func() {
 		t := model.Tier5
 		fb.currentTier = &t
 		fb.updateActiveButton(5)
@@ -87,16 +87,12 @@ func NewFilterBar(onFilterChange func(filter model.TaskFilter)) *FilterBar {
 
 	fb.buttons = []*widget.Button{btnAll, btnT1, btnT2, btnT3, btnT4, btnT5}
 
-	tierRow := container.NewHBox(
+	tierRow := container.NewGridWithColumns(6,
 		btnAll, btnT1, btnT2, btnT3, btnT4, btnT5,
 	)
 
-	// Sized search box with generous width and hide completed check
-	searchBox := container.NewGridWrap(fyne.NewSize(220, 36), fb.searchEntry)
-	rightControls := container.NewHBox(fb.hideDoneCheck, searchBox)
-
-	topBar := container.NewBorder(nil, nil, nil, rightControls, tierRow)
-	fb.container = container.NewVBox(topBar)
+	searchRow := container.NewBorder(nil, nil, nil, fb.hideDoneCheck, fb.searchEntry)
+	fb.container = container.NewVBox(searchRow, tierRow)
 
 	return fb
 }
@@ -121,12 +117,12 @@ func (fb *FilterBar) UpdateCounts(sum *model.Summary) {
 	if sum == nil {
 		return
 	}
-	fb.buttons[0].SetText(fmt.Sprintf("All (%d/%d)", sum.OpenTasks, sum.TotalTasks))
-	fb.buttons[1].SetText(fmt.Sprintf("T1 (%d/%d)", sum.TierCounts[model.Tier1], sum.TotalTierCounts[model.Tier1]))
-	fb.buttons[2].SetText(fmt.Sprintf("T2 (%d/%d)", sum.TierCounts[model.Tier2], sum.TotalTierCounts[model.Tier2]))
-	fb.buttons[3].SetText(fmt.Sprintf("T3 (%d/%d)", sum.TierCounts[model.Tier3], sum.TotalTierCounts[model.Tier3]))
-	fb.buttons[4].SetText(fmt.Sprintf("T4 (%d/%d)", sum.TierCounts[model.Tier4], sum.TotalTierCounts[model.Tier4]))
-	fb.buttons[5].SetText(fmt.Sprintf("T5 (%d/%d)", sum.TierCounts[model.Tier5], sum.TotalTierCounts[model.Tier5]))
+	fb.buttons[0].SetText(fmt.Sprintf("All (%d)", sum.OpenTasks))
+	fb.buttons[1].SetText(fmt.Sprintf("T1 (%d)", sum.TierCounts[model.Tier1]))
+	fb.buttons[2].SetText(fmt.Sprintf("T2 (%d)", sum.TierCounts[model.Tier2]))
+	fb.buttons[3].SetText(fmt.Sprintf("T3 (%d)", sum.TierCounts[model.Tier3]))
+	fb.buttons[4].SetText(fmt.Sprintf("T4 (%d)", sum.TierCounts[model.Tier4]))
+	fb.buttons[5].SetText(fmt.Sprintf("T5 (%d)", sum.TierCounts[model.Tier5]))
 }
 
 func (fb *FilterBar) emit() {
