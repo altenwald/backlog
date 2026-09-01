@@ -16,9 +16,6 @@ bundle: build
 	@mkdir -p $(BUNDLE_DIR)/Contents/Resources
 	@cp bin/backlog $(BUNDLE_DIR)/Contents/MacOS/backlog
 	@cp Backlog.icns $(BUNDLE_DIR)/Contents/Resources/Backlog.icns
-	@cp packaging/install.sh $(BUNDLE_DIR)/Contents/Resources/install.sh
-	@cp packaging/uninstall.sh $(BUNDLE_DIR)/Contents/Resources/uninstall.sh
-	@chmod +x $(BUNDLE_DIR)/Contents/Resources/*.sh
 	@printf '%s\n' \
 		'<?xml version="1.0" encoding="UTF-8"?>' \
 		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \

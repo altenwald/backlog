@@ -21,6 +21,8 @@ func init() {
 }
 
 func runStartApp(cmd *cobra.Command, args []string) error {
+	ensureCLISymlink()
+
 	st, err := store.NewStore(flagDataDir)
 	if err != nil {
 		return fmt.Errorf("error initializing storage: %w", err)

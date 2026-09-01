@@ -21,6 +21,9 @@ var RootCmd = &cobra.Command{
 	Long: `Backlog is a developer-centric task & priority manager featuring a Fyne desktop GUI,
 a resident System Tray menu bar icon, a rich CLI for terminal workflows,
 and a native MCP server for real-time integrations.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		ensureCLISymlink()
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runStartApp(cmd, args)
 	},
