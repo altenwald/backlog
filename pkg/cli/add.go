@@ -13,7 +13,7 @@ import (
 var (
 	addTitle      string
 	addDesc       string
-	addGroup      string
+	addParentID   string
 	addSize       string
 	addTier       int
 	addTag        string
@@ -61,7 +61,7 @@ var addCmd = &cobra.Command{
 		task, err := c.AddTask(proj, model.Task{
 			Title:       addTitle,
 			Description: addDesc,
-			Group:       addGroup,
+			ParentID:    addParentID,
 			Size:        size,
 			Tier:        tier,
 			Tag:         addTag,
@@ -73,7 +73,11 @@ var addCmd = &cobra.Command{
 		}
 
 		sum, _ := c.GetSummary(proj)
-		fmt.Printf("✔ Task #%s created in '%s' [%s] [%s]: %s\n", task.ID, proj, task.Size, task.Tier.ShortLabel(), task.Title)
+		parentInfo := ""
+		if task.ParentID != "" {
+			parentInfo = fmt.Sprintf(" (subtask of #%s)", task.ParentID)
+		}
+		fmt.Printf("✔ Task #%s%s created in '%s' [%s] [%s]: %s\n", task.ID, parentInfo, proj, task.Size, task.Tier.ShortLabel(), task.Title)
 		fmt.Printf("  Current status: %d/%d open\n", sum.OpenTasks, sum.TotalTasks)
 		return nil
 	},
@@ -82,7 +86,7 @@ var addCmd = &cobra.Command{
 func init() {
 	addCmd.Flags().StringVarP(&addTitle, "title", "T", "", "Task title")
 	addCmd.Flags().StringVarP(&addDesc, "desc", "D", "", "Detailed description or context")
-	addCmd.Flags().StringVarP(&addGroup, "group", "g", "General", "Group or category")
+	addCmd.Flags().StringVarP(&addParentID, "parent", "P", "", "Parent task ID (for subtasks/branching)")
 	addCmd.Flags().StringVarP(&addSize, "size", "S", "M", "Effort size (XS, S, M, L, XL)")
 	addCmd.Flags().IntVarP(&addTier, "tier", "t", 3, "Priority Tier (1=Blocker, 2=Important, 3=Visual debt, 4=Internal, 5=Future)")
 	addCmd.Flags().StringVar(&addTag, "tag", "", "Tag or reference label")

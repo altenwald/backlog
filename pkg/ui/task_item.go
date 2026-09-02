@@ -93,7 +93,11 @@ func (item *TaskRowItem) Bind(task model.Task) {
 	item.check.Checked = task.Done
 	item.check.Refresh()
 
-	displayTitle := "#" + task.ID + "  " + task.Title
+	prefix := ""
+	if task.ParentID != "" {
+		prefix = "↳ "
+	}
+	displayTitle := prefix + "#" + task.ID + "  " + task.Title
 	if task.Done {
 		item.title.TextStyle = fyne.TextStyle{Italic: true}
 	} else {

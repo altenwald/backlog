@@ -167,8 +167,8 @@ func (c *Client) ListTasks(projectSlug string, filter model.TaskFilter) ([]model
 	if filter.Tier != nil {
 		params.Set("tier", strconv.Itoa(int(*filter.Tier)))
 	}
-	if filter.Group != nil && *filter.Group != "" {
-		params.Set("group", *filter.Group)
+	if filter.ParentID != nil && *filter.ParentID != "" {
+		params.Set("parent_id", *filter.ParentID)
 	}
 	if filter.Size != nil && *filter.Size != "" {
 		params.Set("size", string(*filter.Size))

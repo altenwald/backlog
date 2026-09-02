@@ -79,14 +79,14 @@ func (t Tier) ShortLabel() string {
 
 type Task struct {
 	ID           string     `json:"id"`
+	ParentID     string     `json:"parent_id,omitempty"` // ID of parent task if this is a subtask
 	Title        string     `json:"title"`
 	Description  string     `json:"description"`
-	Group        string     `json:"group"` // e.g. "Monetization", "Domains", "Infrastructure", "Bugs", etc.
 	Size         Size       `json:"size"`
 	Tier         Tier       `json:"tier"`
 	Done         bool       `json:"done"`
-	Assignee     string     `json:"assignee,omitempty"`      // e.g. "claude", "antigravity", "manuel"
-	Resolution   string     `json:"resolution,omitempty"`    // Summary of implementation details and resolution
+	Assignee     string     `json:"assignee,omitempty"`   // e.g. "claude", "antigravity", "manuel"
+	Resolution   string     `json:"resolution,omitempty"` // Summary of implementation details and resolution
 	Tag          string     `json:"tag,omitempty"`
 	InsertedAt   time.Time  `json:"inserted_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
@@ -142,7 +142,7 @@ func (p *Project) UnmarshalJSON(data []byte) error {
 
 type TaskFilter struct {
 	Tier     *Tier   `json:"tier,omitempty"`
-	Group    *string `json:"group,omitempty"`
+	ParentID *string `json:"parent_id,omitempty"`
 	Size     *Size   `json:"size,omitempty"`
 	Done     *bool   `json:"done,omitempty"`
 	Assignee *string `json:"assignee,omitempty"`
@@ -159,5 +159,4 @@ type Summary struct {
 	OpenSizeCounts  map[Size]int `json:"open_size_counts"`  // Open tasks by size
 	TierCounts      map[Tier]int `json:"tier_counts"`       // Open tasks by tier
 	TotalTierCounts map[Tier]int `json:"total_tier_counts"` // Total tasks by tier
-	Groups          []string     `json:"groups"`
 }

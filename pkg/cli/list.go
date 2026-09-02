@@ -12,7 +12,7 @@ import (
 
 var (
 	flagTier     int
-	flagGroup    string
+	flagParentID string
 	flagDone     string // "true", "false", "all"
 	flagAssignee string
 	flagSearch   string
@@ -29,8 +29,8 @@ var listCmd = &cobra.Command{
 			t := model.Tier(flagTier)
 			filter.Tier = &t
 		}
-		if flagGroup != "" {
-			filter.Group = &flagGroup
+		if flagParentID != "" {
+			filter.ParentID = &flagParentID
 		}
 		if flagDone == "true" {
 			d := true
@@ -87,35 +87,69 @@ var listCmd = &cobra.Command{
 			return nil
 		}
 
-		for _, t := range tasks {
-			statusIcon := "[ ]"
-			if t.Done {
-				statusIcon = "[✓]"
-			}
-			tag := ""
-			if t.Group != "" {
-				tag = fmt.Sprintf(" [%s]", t.Group)
-			}
-			if t.Tag != "" {
-				tag += fmt.Sprintf(" (%s)", t.Tag)
-			}
-			if t.Assignee != "" {
-				tag += fmt.Sprintf(" @%s", strings.TrimPrefix(t.Assignee, "@"))
-			}
-
-			fmt.Printf("%s #%-3s [%-2s] [%-2s] %-38s%s\n",
-				statusIcon, t.ID, t.Size, t.Tier.ShortLabel(), t.Title, tag)
-		}
-
+		printTasksHierarchically(tasks)
 		return nil
 	},
 }
 
+func printTasksHierarchically(tasks []model.Task) {
+	taskMap := make(map[string]model.Task)
+	childrenMap := make(map[string][]model.Task)
+	isChild := make(map[string]bool)
+
+	for _, t := range tasks {
+		taskMap[t.ID] = t
+	}
+
+	for _, t := range tasks {
+		if t.ParentID != "" {
+			if _, exists := taskMap[t.ParentID]; exists {
+				childrenMap[t.ParentID] = append(childrenMap[t.ParentID], t)
+				isChild[t.ID] = true
+			}
+		}
+	}
+
+	var printNode func(t model.Task, depth int)
+	printNode = func(t model.Task, depth int) {
+		statusIcon := "[ ]"
+		if t.Done {
+			statusIcon = "[✓]"
+		}
+		indent := strings.Repeat("  ", depth)
+		prefix := ""
+		if depth > 0 {
+			prefix = "↳ "
+		}
+
+		tag := ""
+		if t.Tag != "" {
+			tag += fmt.Sprintf(" (%s)", t.Tag)
+		}
+		if t.Assignee != "" {
+			tag += fmt.Sprintf(" @%s", strings.TrimPrefix(t.Assignee, "@"))
+		}
+
+		fmt.Printf("%s%s%s #%-3s [%-2s] [%-2s] %s%s\n",
+			indent, prefix, statusIcon, t.ID, t.Size, t.Tier.ShortLabel(), t.Title, tag)
+
+		for _, child := range childrenMap[t.ID] {
+			printNode(child, depth+1)
+		}
+	}
+
+	for _, t := range tasks {
+		if !isChild[t.ID] {
+			printNode(t, 0)
+		}
+	}
+}
+
 func init() {
 	listCmd.Flags().IntVarP(&flagTier, "tier", "t", 0, "Filter by priority Tier (1..5)")
-	listCmd.Flags().StringVarP(&flagGroup, "group", "g", "", "Filter by group/category")
+	listCmd.Flags().StringVarP(&flagParentID, "parent", "P", "", "Filter by parent task ID")
 	listCmd.Flags().StringVarP(&flagDone, "status", "s", "false", "Filter by status: true (done), false (open), all")
 	listCmd.Flags().StringVarP(&flagAssignee, "assignee", "a", "", "Filter by assignee handle (e.g. 'claude', 'unassigned')")
-	listCmd.Flags().StringVarP(&flagSearch, "search", "q", "", "Search by keyword in title/desc/group")
+	listCmd.Flags().StringVarP(&flagSearch, "search", "q", "", "Search by keyword in title/desc")
 	RootCmd.AddCommand(listCmd)
 }

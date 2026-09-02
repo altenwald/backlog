@@ -146,9 +146,9 @@ func (dv *TaskDetailView) ShowTask(task model.Task) {
 	dv.badgesRow.Add(tierBadge)
 	dv.badgesRow.Add(sizeBadge)
 
-	if task.Group != "" {
-		groupBadge := MakeBadge(task.Group, color.NRGBA{R: 70, G: 70, B: 85, A: 255}, color.White)
-		dv.badgesRow.Add(groupBadge)
+	if task.ParentID != "" {
+		parentBadge := MakeBadge("↳ Parent #"+task.ParentID, color.NRGBA{R: 55, G: 75, B: 105, A: 255}, color.White)
+		dv.badgesRow.Add(parentBadge)
 	}
 
 	if task.Tag != "" {

@@ -97,6 +97,9 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 
 	// Title
 	titleText := task.Title
+	if task.ParentID != "" {
+		titleText = "↳ " + titleText
+	}
 	if task.Done {
 		titleText = "✓ " + titleText
 	}
@@ -140,8 +143,9 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 		}
 
 		if len(timeParts) > 0 {
-			timeLabel := widget.NewLabelWithStyle(strings.Join(timeParts, "  ·  "), fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
-			detailBox.Add(timeLabel)
+			timeStr := strings.Join(timeParts, "  •  ")
+			timeLbl := widget.NewLabelWithStyle(timeStr, fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+			detailBox.Add(timeLbl)
 		}
 
 		mdContainer := container.NewPadded(detailBox)
@@ -174,13 +178,15 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	}
 
 	tagText := ""
-	if task.Group != "" {
-		tagText = "[" + task.Group + "]"
-	}
 	if task.Tag != "" {
-		tagText = tagText + " " + task.Tag
+		tagText = task.Tag
 	}
 	tagLabel := widget.NewLabelWithStyle(tagText, fyne.TextAlignTrailing, fyne.TextStyle{Monospace: true})
+
+	var parentBadge fyne.CanvasObject
+	if task.ParentID != "" {
+		parentBadge = MakeBadge("↳ #"+task.ParentID, color.NRGBA{R: 55, G: 75, B: 105, A: 255}, color.White)
+	}
 
 	// Assignee Badge (Option A: distinctive pill)
 	var assigneeBadge fyne.CanvasObject
@@ -203,8 +209,11 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	})
 	deleteBtn.Importance = widget.DangerImportance
 
-	// Ensure assignee, buttons and tags are always flushed cleanly to the right edge
+	// Ensure parent badge, assignee, buttons and tags are always flushed cleanly to the right edge
 	tagRowItems := []fyne.CanvasObject{layout.NewSpacer()}
+	if parentBadge != nil {
+		tagRowItems = append(tagRowItems, parentBadge)
+	}
 	if assigneeBadge != nil {
 		tagRowItems = append(tagRowItems, assigneeBadge)
 	}

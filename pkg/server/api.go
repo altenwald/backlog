@@ -187,8 +187,10 @@ func (h *APIHandler) listTasks(w http.ResponseWriter, r *http.Request) {
 			filter.Tier = &tier
 		}
 	}
-	if gStr := q.Get("group"); gStr != "" {
-		filter.Group = &gStr
+	if pStr := q.Get("parent_id"); pStr != "" {
+		filter.ParentID = &pStr
+	} else if pStr := q.Get("parent"); pStr != "" {
+		filter.ParentID = &pStr
 	}
 	if sStr := q.Get("size"); sStr != "" {
 		size := model.Size(strings.ToUpper(sStr))

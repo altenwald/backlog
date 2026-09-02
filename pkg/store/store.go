@@ -317,7 +317,7 @@ func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.
 		if filter.Tier != nil && task.Tier != *filter.Tier {
 			continue
 		}
-		if filter.Group != nil && *filter.Group != "" && task.Group != *filter.Group {
+		if filter.ParentID != nil && task.ParentID != *filter.ParentID {
 			continue
 		}
 		if filter.Size != nil && task.Size != *filter.Size {
@@ -340,10 +340,10 @@ func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.
 		if searchLower != "" {
 			inTitle := strings.Contains(strings.ToLower(task.Title), searchLower)
 			inDesc := strings.Contains(strings.ToLower(task.Description), searchLower)
-			inGroup := strings.Contains(strings.ToLower(task.Group), searchLower)
 			inTag := strings.Contains(strings.ToLower(task.Tag), searchLower)
 			inAssignee := strings.Contains(strings.ToLower(task.Assignee), searchLower)
-			if !inTitle && !inDesc && !inGroup && !inTag && !inAssignee {
+			inID := task.ID == searchLower || task.ParentID == searchLower
+			if !inTitle && !inDesc && !inTag && !inAssignee && !inID {
 				continue
 			}
 		}
@@ -400,8 +400,6 @@ func (s *Store) GetSummary(projectSlug string) (*model.Summary, error) {
 		TotalTierCounts: make(map[model.Tier]int),
 	}
 
-	groupMap := make(map[string]bool)
-
 	for _, t := range p.Tasks {
 		summary.TotalTasks++
 		summary.SizeCounts[t.Size]++
@@ -413,11 +411,6 @@ func (s *Store) GetSummary(projectSlug string) (*model.Summary, error) {
 			summary.OpenTasks++
 			summary.OpenSizeCounts[t.Size]++
 			summary.TierCounts[t.Tier]++
-		}
-
-		if t.Group != "" && !groupMap[t.Group] {
-			groupMap[t.Group] = true
-			summary.Groups = append(summary.Groups, t.Group)
 		}
 	}
 
@@ -446,6 +439,19 @@ func (s *Store) AddTask(projectSlug string, task model.Task) (*model.Task, error
 	}
 	if task.Tier <= 0 || task.Tier > 5 {
 		task.Tier = model.Tier3
+	}
+
+	if task.ParentID != "" {
+		parentFound := false
+		for _, existing := range p.Tasks {
+			if existing.ID == task.ParentID {
+				parentFound = true
+				break
+			}
+		}
+		if !parentFound {
+			return nil, fmt.Errorf("parent task #%s not found in project '%s'", task.ParentID, projectSlug)
+		}
 	}
 
 	now := time.Now()
@@ -544,8 +550,40 @@ func (s *Store) UpdateTask(projectSlug string, task model.Task) (*model.Task, er
 				p.Tasks[i].Title = task.Title
 			}
 			p.Tasks[i].Description = task.Description
-			if task.Group != "" {
-				p.Tasks[i].Group = task.Group
+			if task.ParentID != "" {
+				if task.ParentID == task.ID {
+					return nil, errors.New("a task cannot be its own parent")
+				}
+				if task.ParentID == "none" || task.ParentID == "0" {
+					p.Tasks[i].ParentID = ""
+				} else {
+					parentFound := false
+					for _, existing := range p.Tasks {
+						if existing.ID == task.ParentID {
+							parentFound = true
+							break
+						}
+					}
+					if !parentFound {
+						return nil, fmt.Errorf("parent task #%s not found in project '%s'", task.ParentID, projectSlug)
+					}
+					// Cycle check
+					curr := task.ParentID
+					for curr != "" {
+						if curr == task.ID {
+							return nil, errors.New("cannot set parent: circular dependency detected")
+						}
+						next := ""
+						for _, existing := range p.Tasks {
+							if existing.ID == curr {
+								next = existing.ParentID
+								break
+							}
+						}
+						curr = next
+					}
+					p.Tasks[i].ParentID = task.ParentID
+				}
 			}
 			if task.Size != "" {
 				p.Tasks[i].Size = task.Size
@@ -630,19 +668,38 @@ func (s *Store) DeleteTask(projectSlug string, taskID string) error {
 		return fmt.Errorf("project '%s' not found", projectSlug)
 	}
 
-	foundIdx := -1
-	for i, t := range p.Tasks {
+	// Verify taskID exists
+	found := false
+	for _, t := range p.Tasks {
 		if t.ID == taskID {
-			foundIdx = i
+			found = true
 			break
 		}
 	}
-
-	if foundIdx == -1 {
+	if !found {
 		return fmt.Errorf("task ID '%s' not found in project '%s'", taskID, projectSlug)
 	}
 
-	p.Tasks = append(p.Tasks[:foundIdx], p.Tasks[foundIdx+1:]...)
+	// Find all descendant tasks to delete recursively
+	toDelete := map[string]bool{taskID: true}
+	added := true
+	for added {
+		added = false
+		for _, t := range p.Tasks {
+			if !toDelete[t.ID] && toDelete[t.ParentID] {
+				toDelete[t.ID] = true
+				added = true
+			}
+		}
+	}
+
+	var remaining []model.Task
+	for _, t := range p.Tasks {
+		if !toDelete[t.ID] {
+			remaining = append(remaining, t)
+		}
+	}
+	p.Tasks = remaining
 	p.UpdatedAt = time.Now()
 
 	if err := s.saveProject(p); err != nil {

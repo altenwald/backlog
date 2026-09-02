@@ -50,6 +50,10 @@ Follow this standard protocol when interacting with Backlog:
      * Tier 5 (Future): Nice-to-have suggestions, experimental ideas, or deferred feature proposals for future milestones.
    - Execution rule: Always address Tier 1 and Tier 2 tasks first.
    - Effort Sizes: XS, S, M, L, XL.
+   - Task Hierarchy & Subtask Branching:
+     * Tasks can be decomposed hierarchically: when breaking down a larger feature, design goal, or complex issue into smaller parts, create child tasks by providing 'parent_id="<parent-task-id>"'.
+     * Subtasks can also branch into further subtasks.
+     * When a parent task is deleted, all its descendant subtasks are automatically cascade deleted.
 
 5. REPORTING:
    - Always inform the user when claiming a task, report test coverage results, and report completion with the commit hash and resolution summary.`
@@ -242,10 +246,10 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 	s.AddTool(
 		mcp.NewTool(
 			"list_tasks",
-			mcp.WithDescription("List tasks in a project with optional filters by Tier (1 to 5), Group, Status (open/completed), Size, or search query."),
+			mcp.WithDescription("List tasks in a project with optional filters by Tier (1 to 5), parent task ID, Status (open/completed), Size, or search query."),
 			mcp.WithString("project", mcp.Description("Project slug (optional; defaults to active project)")),
 			mcp.WithNumber("tier", mcp.Description("Filter by priority Tier: 1=Blocker, 2=Important, 3=Visual debt, 4=Internal, 5=Future")),
-			mcp.WithString("group", mcp.Description("Filter by category/group (e.g. 'Monetization', 'Domains', 'Bugs')")),
+			mcp.WithString("parent_id", mcp.Description("Filter by parent task ID (optional; pass task ID to list subtasks)")),
 			mcp.WithString("size", mcp.Description("Filter by size: 'XS', 'S', 'M', 'L', 'XL'")),
 			mcp.WithBoolean("done", mcp.Description("Filter by status: true=completed, false=open")),
 			mcp.WithString("search", mcp.Description("Text search term")),
@@ -263,8 +267,8 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 				t := model.Tier(tierVal)
 				filter.Tier = &t
 			}
-			if gVal := req.GetString("group", ""); gVal != "" {
-				filter.Group = &gVal
+			if pVal := req.GetString("parent_id", ""); pVal != "" {
+				filter.ParentID = &pVal
 			}
 			if sVal := req.GetString("size", ""); sVal != "" {
 				sz := model.Size(strings.ToUpper(sVal))
@@ -352,7 +356,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			mcp.WithString("title", mcp.Description("Concise title of the task"), mcp.Required()),
 			mcp.WithString("description", mcp.Description("Detailed description or context")),
 			mcp.WithString("project", mcp.Description("Project slug (optional; defaults to active project)")),
-			mcp.WithString("group", mcp.Description("Group or category (e.g. 'Monetization', 'Domains', 'Bugs', 'General')")),
+			mcp.WithString("parent_id", mcp.Description("Parent task ID if this task is a subtask/branch (optional)")),
 			mcp.WithString("size", mcp.Description("Effort size: 'XS', 'S', 'M', 'L', 'XL' (default 'M')")),
 			mcp.WithNumber("tier", mcp.Description("Priority tier: 1 (Blocker) to 5 (Future). Default 3")),
 			mcp.WithString("tag", mcp.Description("Tag or reference label (e.g. 'TODO', 'spec 08-24')")),
@@ -371,7 +375,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			}
 
 			desc := req.GetString("description", "")
-			group := req.GetString("group", "")
+			parentID := req.GetString("parent_id", "")
 			sizeStr := req.GetString("size", "M")
 			tag := req.GetString("tag", "")
 			resolution := req.GetString("resolution", "")
@@ -386,7 +390,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			task, err := be.AddTask(project, model.Task{
 				Title:       title,
 				Description: desc,
-				Group:       group,
+				ParentID:    parentID,
 				Size:        model.Size(strings.ToUpper(sizeStr)),
 				Tier:        tier,
 				Tag:         tag,
@@ -514,7 +518,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			mcp.WithString("project", mcp.Description("Project slug")),
 			mcp.WithString("title", mcp.Description("New title")),
 			mcp.WithString("description", mcp.Description("New description")),
-			mcp.WithString("group", mcp.Description("New category/group")),
+			mcp.WithString("parent_id", mcp.Description("New parent task ID (or 'none'/'0' to detach/unparent)")),
 			mcp.WithString("size", mcp.Description("New effort size ('XS', 'S', 'M', 'L', 'XL')")),
 			mcp.WithNumber("tier", mcp.Description("New Tier (1..5)")),
 			mcp.WithString("tag", mcp.Description("New tag")),
@@ -547,8 +551,8 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			if d := req.GetString("description", ""); d != "" {
 				update.Description = d
 			}
-			if g := req.GetString("group", ""); g != "" {
-				update.Group = g
+			if p := req.GetString("parent_id", ""); p != "" {
+				update.ParentID = p
 			}
 			if s := req.GetString("size", ""); s != "" {
 				update.Size = model.Size(strings.ToUpper(s))

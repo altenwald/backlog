@@ -19,7 +19,7 @@
     * `T4 · Internal` (Purple)
     * `T5 · Future` (Gray)
   * Real-time search query filtering.
-  * Tasks grouped cleanly by category.
+  * Hierarchical task tree: break down complex tasks into branched subtasks (`parent_id`).
   * Single-click task completion with live recalculations.
 * **Multi-Project Support**:
   * Isolate tasks and metrics across multiple independent projects (*Backend*, *Frontend*, etc.).
@@ -66,14 +66,15 @@ export BACKLOG_PROJECT=my-project
 # List open tasks (with optional filters)
 backlog list
 backlog list --tier 1
-backlog list -g "Core"
+backlog list -P 1
 backlog list -p frontend --tier 2
 
 # Display metrics summary
 backlog summary
 
-# Add a new task
-backlog add --title "Renew SSL certificates" --tier 1 --size M --group "Infrastructure"
+# Add a new task (or subtask)
+backlog add --title "Renew SSL certificates" --tier 1 --size M
+backlog add --title "Configure Let's Encrypt bot" --parent 1 --size S
 
 # Complete or reopen tasks
 backlog done 1
