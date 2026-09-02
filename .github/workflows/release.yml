@@ -141,7 +141,8 @@ jobs:
             BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             LDFLAGS="-s -w -X github.com/altenwald/backlog/pkg/version.Version=${TAG} -X github.com/altenwald/backlog/pkg/version.GitCommit=${COMMIT} -X github.com/altenwald/backlog/pkg/version.BuildDate=${BUILD_DATE}"
             mkdir -p bin dist
-            CGO_ENABLED=1 go build -ldflags="${LDFLAGS}" -o bin/backlog ./cmd/backlog
+            git config --global --add safe.directory "$PWD" || true
+            CGO_ENABLED=1 go build -buildvcs=false -ldflags="${LDFLAGS}" -o bin/backlog ./cmd/backlog
             tar -czvf "dist/backlog-${TAG}-freebsd-amd64.tar.gz" -C bin backlog
 
       - name: Upload FreeBSD artifacts
