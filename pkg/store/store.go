@@ -313,12 +313,34 @@ func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.
 	var results []model.Task
 	searchLower := strings.ToLower(strings.TrimSpace(filter.Search))
 
+	taskMap := make(map[string]model.Task, len(p.Tasks))
+	for _, t := range p.Tasks {
+		taskMap[t.ID] = t
+	}
+
 	for _, task := range p.Tasks {
 		if filter.Tier != nil && task.Tier != *filter.Tier {
 			continue
 		}
 		if filter.ParentID != nil && task.ParentID != *filter.ParentID {
 			continue
+		}
+		if filter.DependsOn != nil && *filter.DependsOn != "" {
+			hasDep := false
+			for _, d := range task.DependsOn {
+				if d == *filter.DependsOn {
+					hasDep = true
+					break
+				}
+			}
+			if !hasDep {
+				continue
+			}
+		}
+		if filter.Blocked != nil {
+			if task.IsBlocked(taskMap) != *filter.Blocked {
+				continue
+			}
 		}
 		if filter.Size != nil && task.Size != *filter.Size {
 			continue
@@ -363,8 +385,18 @@ func (s *Store) GetTopPriorities(projectSlug string, limit int) ([]model.Task, e
 		return nil, err
 	}
 
-	// Sort by Tier (ascending: T1 first), then by size weight (descending)
+	taskMap := make(map[string]model.Task, len(tasks))
+	for _, t := range tasks {
+		taskMap[t.ID] = t
+	}
+
+	// Sort by: 1) Unblocked first (actionable), 2) Tier (ascending: T1 first), 3) Size weight (descending)
 	sort.Slice(tasks, func(i, j int) bool {
+		blockedI := tasks[i].IsBlocked(taskMap)
+		blockedJ := tasks[j].IsBlocked(taskMap)
+		if blockedI != blockedJ {
+			return !blockedI
+		}
 		if tasks[i].Tier != tasks[j].Tier {
 			return tasks[i].Tier < tasks[j].Tier
 		}
@@ -453,6 +485,28 @@ func (s *Store) AddTask(projectSlug string, task model.Task) (*model.Task, error
 			return nil, fmt.Errorf("parent task #%s not found in project '%s'", task.ParentID, projectSlug)
 		}
 	}
+
+	var cleanDepends []string
+	seenDep := make(map[string]bool)
+	for _, depID := range task.DependsOn {
+		depID = strings.TrimSpace(depID)
+		if depID == "" || seenDep[depID] {
+			continue
+		}
+		seenDep[depID] = true
+		foundDep := false
+		for _, existing := range p.Tasks {
+			if existing.ID == depID {
+				foundDep = true
+				break
+			}
+		}
+		if !foundDep {
+			return nil, fmt.Errorf("dependency task #%s not found in project '%s'", depID, projectSlug)
+		}
+		cleanDepends = append(cleanDepends, depID)
+	}
+	task.DependsOn = cleanDepends
 
 	now := time.Now()
 	task.InsertedAt = now
@@ -588,6 +642,66 @@ func (s *Store) UpdateTask(projectSlug string, task model.Task) (*model.Task, er
 			if task.Size != "" {
 				p.Tasks[i].Size = task.Size
 			}
+			if task.DependsOn != nil {
+				var cleanDepends []string
+				seenDep := make(map[string]bool)
+				for _, depID := range task.DependsOn {
+					depID = strings.TrimSpace(depID)
+					if depID == "" || seenDep[depID] {
+						continue
+					}
+					if depID == task.ID {
+						return nil, errors.New("a task cannot depend on itself")
+					}
+					seenDep[depID] = true
+					foundDep := false
+					for _, existing := range p.Tasks {
+						if existing.ID == depID {
+							foundDep = true
+							break
+						}
+					}
+					if !foundDep {
+						return nil, fmt.Errorf("dependency task #%s not found in project '%s'", depID, projectSlug)
+					}
+					cleanDepends = append(cleanDepends, depID)
+				}
+
+				// Cycle check in dependency graph
+				depMap := make(map[string][]string)
+				for _, t := range p.Tasks {
+					if t.ID == task.ID {
+						depMap[t.ID] = cleanDepends
+					} else {
+						depMap[t.ID] = t.DependsOn
+					}
+				}
+
+				visited := make(map[string]bool)
+				recStack := make(map[string]bool)
+				var hasCycle func(curr string) bool
+				hasCycle = func(curr string) bool {
+					visited[curr] = true
+					recStack[curr] = true
+					for _, neighbor := range depMap[curr] {
+						if !visited[neighbor] {
+							if hasCycle(neighbor) {
+								return true
+							}
+						} else if recStack[neighbor] {
+							return true
+						}
+					}
+					recStack[curr] = false
+					return false
+				}
+
+				if hasCycle(task.ID) {
+					return nil, errors.New("cannot set dependency: circular dependency detected")
+				}
+
+				p.Tasks[i].DependsOn = cleanDepends
+			}
 			if task.Tier > 0 {
 				p.Tasks[i].Tier = task.Tier
 			}
@@ -696,6 +810,13 @@ func (s *Store) DeleteTask(projectSlug string, taskID string) error {
 	var remaining []model.Task
 	for _, t := range p.Tasks {
 		if !toDelete[t.ID] {
+			var cleanDep []string
+			for _, d := range t.DependsOn {
+				if !toDelete[d] {
+					cleanDep = append(cleanDep, d)
+				}
+			}
+			t.DependsOn = cleanDep
 			remaining = append(remaining, t)
 		}
 	}

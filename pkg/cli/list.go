@@ -13,6 +13,7 @@ import (
 var (
 	flagTier     int
 	flagParentID string
+	flagBlocked  string // "true", "false", ""
 	flagDone     string // "true", "false", "all"
 	flagAssignee string
 	flagSearch   string
@@ -31,6 +32,13 @@ var listCmd = &cobra.Command{
 		}
 		if flagParentID != "" {
 			filter.ParentID = &flagParentID
+		}
+		if flagBlocked == "true" {
+			b := true
+			filter.Blocked = &b
+		} else if flagBlocked == "false" {
+			b := false
+			filter.Blocked = &b
 		}
 		if flagDone == "true" {
 			d := true
@@ -122,6 +130,12 @@ func printTasksHierarchically(tasks []model.Task) {
 			prefix = "↳ "
 		}
 
+		blockTag := ""
+		if t.IsBlocked(taskMap) {
+			blockingIDs := t.BlockingTaskIDs(taskMap)
+			blockTag = fmt.Sprintf(" ⛔[blocked by #%s]", strings.Join(blockingIDs, ", #"))
+		}
+
 		tag := ""
 		if t.Tag != "" {
 			tag += fmt.Sprintf(" (%s)", t.Tag)
@@ -130,8 +144,8 @@ func printTasksHierarchically(tasks []model.Task) {
 			tag += fmt.Sprintf(" @%s", strings.TrimPrefix(t.Assignee, "@"))
 		}
 
-		fmt.Printf("%s%s%s #%-3s [%-2s] [%-2s] %s%s\n",
-			indent, prefix, statusIcon, t.ID, t.Size, t.Tier.ShortLabel(), t.Title, tag)
+		fmt.Printf("%s%s%s #%-3s [%-2s] [%-2s] %s%s%s\n",
+			indent, prefix, statusIcon, t.ID, t.Size, t.Tier.ShortLabel(), t.Title, blockTag, tag)
 
 		for _, child := range childrenMap[t.ID] {
 			printNode(child, depth+1)
@@ -148,6 +162,7 @@ func printTasksHierarchically(tasks []model.Task) {
 func init() {
 	listCmd.Flags().IntVarP(&flagTier, "tier", "t", 0, "Filter by priority Tier (1..5)")
 	listCmd.Flags().StringVarP(&flagParentID, "parent", "P", "", "Filter by parent task ID")
+	listCmd.Flags().StringVar(&flagBlocked, "blocked", "", "Filter by blocked state: true (blocked), false (actionable)")
 	listCmd.Flags().StringVarP(&flagDone, "status", "s", "false", "Filter by status: true (done), false (open), all")
 	listCmd.Flags().StringVarP(&flagAssignee, "assignee", "a", "", "Filter by assignee handle (e.g. 'claude', 'unassigned')")
 	listCmd.Flags().StringVarP(&flagSearch, "search", "q", "", "Search by keyword in title/desc")

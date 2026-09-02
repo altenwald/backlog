@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -97,7 +98,11 @@ func (item *TaskRowItem) Bind(task model.Task) {
 	if task.ParentID != "" {
 		prefix = "↳ "
 	}
-	displayTitle := prefix + "#" + task.ID + "  " + task.Title
+	depInfo := ""
+	if len(task.DependsOn) > 0 {
+		depInfo = " [⛔ #" + strings.Join(task.DependsOn, ", #") + "]"
+	}
+	displayTitle := prefix + "#" + task.ID + "  " + task.Title + depInfo
 	if task.Done {
 		item.title.TextStyle = fyne.TextStyle{Italic: true}
 	} else {

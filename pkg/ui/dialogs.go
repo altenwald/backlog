@@ -27,6 +27,9 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 	parentEntry := widget.NewEntry()
 	parentEntry.SetPlaceHolder("Parent Task ID (optional, e.g. 1)")
 
+	dependsEntry := widget.NewEntry()
+	dependsEntry.SetPlaceHolder("Task IDs this task depends on (e.g. 1, 2)")
+
 	assigneeEntry := widget.NewEntry()
 	assigneeEntry.SetPlaceHolder("e.g. @claude, @manuel...")
 
@@ -54,6 +57,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 		widget.NewFormItem("Title", titleEntry),
 		widget.NewFormItem("Description", descEntry),
 		widget.NewFormItem("Parent Task ID", parentEntry),
+		widget.NewFormItem("Depends on", dependsEntry),
 		widget.NewFormItem("Assignee", assigneeEntry),
 		widget.NewFormItem("Effort Size", sizeSelect),
 		widget.NewFormItem("Priority / Tier", tierSelect),
@@ -73,10 +77,18 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 			}
 		}
 
+		var dependsOn []string
+		for _, part := range strings.Split(dependsEntry.Text, ",") {
+			if s := strings.TrimSpace(part); s != "" {
+				dependsOn = append(dependsOn, s)
+			}
+		}
+
 		task := model.Task{
 			Title:       strings.TrimSpace(titleEntry.Text),
 			Description: strings.TrimSpace(descEntry.Text),
 			ParentID:    strings.TrimSpace(parentEntry.Text),
+			DependsOn:   dependsOn,
 			Assignee:    strings.TrimSpace(assigneeEntry.Text),
 			Size:        model.Size(sizeSelect.Selected),
 			Tier:        model.Tier(tierNum),
@@ -105,6 +117,10 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 	parentEntry := widget.NewEntry()
 	parentEntry.SetPlaceHolder("Parent Task ID (optional, e.g. 1)")
 	parentEntry.SetText(task.ParentID)
+
+	dependsEntry := widget.NewEntry()
+	dependsEntry.SetPlaceHolder("e.g. 1, 2 (IDs this task depends on)")
+	dependsEntry.SetText(strings.Join(task.DependsOn, ", "))
 
 	assigneeEntry := widget.NewEntry()
 	assigneeEntry.SetPlaceHolder("e.g. @claude, @manuel...")
@@ -140,6 +156,7 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 		widget.NewFormItem("Title", titleEntry),
 		widget.NewFormItem("Description", descEntry),
 		widget.NewFormItem("Parent Task ID", parentEntry),
+		widget.NewFormItem("Depends on", dependsEntry),
 		widget.NewFormItem("Assignee", assigneeEntry),
 		widget.NewFormItem("Effort Size", sizeSelect),
 		widget.NewFormItem("Priority / Tier", tierSelect),
@@ -159,10 +176,18 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 			}
 		}
 
+		var dependsOn []string
+		for _, part := range strings.Split(dependsEntry.Text, ",") {
+			if s := strings.TrimSpace(part); s != "" {
+				dependsOn = append(dependsOn, s)
+			}
+		}
+
 		updated := task
 		updated.Title = strings.TrimSpace(titleEntry.Text)
 		updated.Description = strings.TrimSpace(descEntry.Text)
 		updated.ParentID = strings.TrimSpace(parentEntry.Text)
+		updated.DependsOn = dependsOn
 		updated.Assignee = strings.TrimSpace(assigneeEntry.Text)
 		updated.Size = model.Size(sizeSelect.Selected)
 		updated.Tier = model.Tier(tierNum)

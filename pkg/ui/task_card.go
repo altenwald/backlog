@@ -66,7 +66,7 @@ func FormatAssignee(assignee string) string {
 
 func MakeBadge(text string, bg color.Color, fg color.Color) fyne.CanvasObject {
 	lbl := canvas.NewText(text, fg)
-	lbl.TextStyle = fyne.TextStyle{Bold: true, Monospace: true}
+	lbl.TextStyle = fyne.TextStyle{Bold: true}
 	lbl.TextSize = 10.5
 	lbl.Alignment = fyne.TextAlignCenter
 
@@ -188,6 +188,11 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 		parentBadge = MakeBadge("↳ #"+task.ParentID, color.NRGBA{R: 55, G: 75, B: 105, A: 255}, color.White)
 	}
 
+	var depBadge fyne.CanvasObject
+	if len(task.DependsOn) > 0 {
+		depBadge = MakeBadge("⛔ #"+strings.Join(task.DependsOn, ",#"), color.NRGBA{R: 155, G: 60, B: 60, A: 255}, color.White)
+	}
+
 	// Assignee Badge (Option A: distinctive pill)
 	var assigneeBadge fyne.CanvasObject
 	if task.Assignee != "" {
@@ -209,10 +214,13 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	})
 	deleteBtn.Importance = widget.DangerImportance
 
-	// Ensure parent badge, assignee, buttons and tags are always flushed cleanly to the right edge
+	// Ensure parent badge, dep badge, assignee, buttons and tags are always flushed cleanly to the right edge
 	tagRowItems := []fyne.CanvasObject{layout.NewSpacer()}
 	if parentBadge != nil {
 		tagRowItems = append(tagRowItems, parentBadge)
+	}
+	if depBadge != nil {
+		tagRowItems = append(tagRowItems, depBadge)
 	}
 	if assigneeBadge != nil {
 		tagRowItems = append(tagRowItems, assigneeBadge)

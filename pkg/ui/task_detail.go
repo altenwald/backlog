@@ -115,6 +115,10 @@ func NewTaskDetailView(callbacks TaskDetailCallbacks) *TaskDetailView {
 	return dv
 }
 
+func (dv *TaskDetailView) CurrentTask() *model.Task {
+	return dv.currentTask
+}
+
 func (dv *TaskDetailView) Clear() {
 	dv.currentTask = nil
 	dv.contentWrap.Hide()
@@ -149,6 +153,11 @@ func (dv *TaskDetailView) ShowTask(task model.Task) {
 	if task.ParentID != "" {
 		parentBadge := MakeBadge("↳ Parent #"+task.ParentID, color.NRGBA{R: 55, G: 75, B: 105, A: 255}, color.White)
 		dv.badgesRow.Add(parentBadge)
+	}
+
+	if len(task.DependsOn) > 0 {
+		depBadge := MakeBadge("⛔ Depends on #"+strings.Join(task.DependsOn, ", #"), color.NRGBA{R: 160, G: 65, B: 65, A: 255}, color.White)
+		dv.badgesRow.Add(depBadge)
 	}
 
 	if task.Tag != "" {

@@ -54,6 +54,10 @@ Follow this standard protocol when interacting with Backlog:
      * Tasks can be decomposed hierarchically: when breaking down a larger feature, design goal, or complex issue into smaller parts, create child tasks by providing 'parent_id="<parent-task-id>"'.
      * Subtasks can also branch into further subtasks.
      * When a parent task is deleted, all its descendant subtasks are automatically cascade deleted.
+   - Dependencies & Blocking:
+     * Tasks can declare dependencies via 'depends_on=["<task-id>"]' (or comma-separated string).
+     * A task is BLOCKED until all its dependency tasks are marked as completed ('done=true').
+     * CRITICAL AGENT RULE: Never pick or start work on a task that is BLOCKED. Always resolve the blocking dependencies first.
 
 5. REPORTING:
    - Always inform the user when claiming a task, report test coverage results, and report completion with the commit hash and resolution summary.`
@@ -250,6 +254,8 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			mcp.WithString("project", mcp.Description("Project slug (optional; defaults to active project)")),
 			mcp.WithNumber("tier", mcp.Description("Filter by priority Tier: 1=Blocker, 2=Important, 3=Visual debt, 4=Internal, 5=Future")),
 			mcp.WithString("parent_id", mcp.Description("Filter by parent task ID (optional; pass task ID to list subtasks)")),
+			mcp.WithString("depends_on", mcp.Description("Filter tasks that depend on this specific task ID (optional)")),
+			mcp.WithBoolean("blocked", mcp.Description("Filter by blocked state: true=only blocked tasks, false=only unblocked/actionable tasks")),
 			mcp.WithString("size", mcp.Description("Filter by size: 'XS', 'S', 'M', 'L', 'XL'")),
 			mcp.WithBoolean("done", mcp.Description("Filter by status: true=completed, false=open")),
 			mcp.WithString("search", mcp.Description("Text search term")),
@@ -270,6 +276,9 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			if pVal := req.GetString("parent_id", ""); pVal != "" {
 				filter.ParentID = &pVal
 			}
+			if depVal := req.GetString("depends_on", ""); depVal != "" {
+				filter.DependsOn = &depVal
+			}
 			if sVal := req.GetString("size", ""); sVal != "" {
 				sz := model.Size(strings.ToUpper(sVal))
 				filter.Size = &sz
@@ -277,6 +286,9 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			if rawArgs := req.GetArguments(); rawArgs != nil {
 				if doneVal, ok := rawArgs["done"].(bool); ok {
 					filter.Done = &doneVal
+				}
+				if blockedVal, ok := rawArgs["blocked"].(bool); ok {
+					filter.Blocked = &blockedVal
 				}
 			}
 			if searchVal := req.GetString("search", ""); searchVal != "" {
@@ -357,6 +369,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			mcp.WithString("description", mcp.Description("Detailed description or context")),
 			mcp.WithString("project", mcp.Description("Project slug (optional; defaults to active project)")),
 			mcp.WithString("parent_id", mcp.Description("Parent task ID if this task is a subtask/branch (optional)")),
+			mcp.WithString("depends_on", mcp.Description("Comma-separated task IDs this task depends on / is blocked by (optional)")),
 			mcp.WithString("size", mcp.Description("Effort size: 'XS', 'S', 'M', 'L', 'XL' (default 'M')")),
 			mcp.WithNumber("tier", mcp.Description("Priority tier: 1 (Blocker) to 5 (Future). Default 3")),
 			mcp.WithString("tag", mcp.Description("Tag or reference label (e.g. 'TODO', 'spec 08-24')")),
@@ -381,6 +394,26 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			resolution := req.GetString("resolution", "")
 			assignee := req.GetString("assignee", "")
 
+			var dependsOn []string
+			if rawArgs := req.GetArguments(); rawArgs != nil {
+				if deps, ok := rawArgs["depends_on"].([]any); ok {
+					for _, d := range deps {
+						if s, ok := d.(string); ok && strings.TrimSpace(s) != "" {
+							dependsOn = append(dependsOn, strings.TrimSpace(s))
+						}
+					}
+				}
+			}
+			if len(dependsOn) == 0 {
+				if depStr := req.GetString("depends_on", ""); depStr != "" {
+					for _, part := range strings.Split(depStr, ",") {
+						if s := strings.TrimSpace(part); s != "" {
+							dependsOn = append(dependsOn, s)
+						}
+					}
+				}
+			}
+
 			tier := model.Tier3
 			tierVal := req.GetInt("tier", 3)
 			if tierVal >= 1 && tierVal <= 5 {
@@ -391,6 +424,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 				Title:       title,
 				Description: desc,
 				ParentID:    parentID,
+				DependsOn:   dependsOn,
 				Size:        model.Size(strings.ToUpper(sizeStr)),
 				Tier:        tier,
 				Tag:         tag,
@@ -519,6 +553,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			mcp.WithString("title", mcp.Description("New title")),
 			mcp.WithString("description", mcp.Description("New description")),
 			mcp.WithString("parent_id", mcp.Description("New parent task ID (or 'none'/'0' to detach/unparent)")),
+			mcp.WithString("depends_on", mcp.Description("New comma-separated dependency task IDs (or 'none'/'clear' to clear dependencies)")),
 			mcp.WithString("size", mcp.Description("New effort size ('XS', 'S', 'M', 'L', 'XL')")),
 			mcp.WithNumber("tier", mcp.Description("New Tier (1..5)")),
 			mcp.WithString("tag", mcp.Description("New tag")),
@@ -553,6 +588,30 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			}
 			if p := req.GetString("parent_id", ""); p != "" {
 				update.ParentID = p
+			}
+			if rawArgs := req.GetArguments(); rawArgs != nil {
+				if deps, ok := rawArgs["depends_on"].([]any); ok {
+					var list []string
+					for _, d := range deps {
+						if s, ok := d.(string); ok && strings.TrimSpace(s) != "" {
+							list = append(list, strings.TrimSpace(s))
+						}
+					}
+					update.DependsOn = list
+				} else if depStr, ok := rawArgs["depends_on"].(string); ok {
+					depStr = strings.TrimSpace(depStr)
+					if depStr == "none" || depStr == "clear" || depStr == "0" {
+						update.DependsOn = []string{}
+					} else if depStr != "" {
+						var list []string
+						for _, part := range strings.Split(depStr, ",") {
+							if s := strings.TrimSpace(part); s != "" {
+								list = append(list, s)
+							}
+						}
+						update.DependsOn = list
+					}
+				}
 			}
 			if s := req.GetString("size", ""); s != "" {
 				update.Size = model.Size(strings.ToUpper(s))

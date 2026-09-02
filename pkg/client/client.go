@@ -170,6 +170,12 @@ func (c *Client) ListTasks(projectSlug string, filter model.TaskFilter) ([]model
 	if filter.ParentID != nil && *filter.ParentID != "" {
 		params.Set("parent_id", *filter.ParentID)
 	}
+	if filter.DependsOn != nil && *filter.DependsOn != "" {
+		params.Set("depends_on", *filter.DependsOn)
+	}
+	if filter.Blocked != nil {
+		params.Set("blocked", strconv.FormatBool(*filter.Blocked))
+	}
 	if filter.Size != nil && *filter.Size != "" {
 		params.Set("size", string(*filter.Size))
 	}
@@ -197,6 +203,23 @@ func (c *Client) ListTasks(projectSlug string, filter model.TaskFilter) ([]model
 	var tasks []model.Task
 	err = json.NewDecoder(resp.Body).Decode(&tasks)
 	return tasks, err
+}
+
+func (c *Client) GetTask(projectSlug string, taskID string) (*model.Task, error) {
+	u := fmt.Sprintf("%s/api/projects/%s/tasks/%s", c.baseURL, url.PathEscape(projectSlug), url.PathEscape(taskID))
+	resp, err := c.httpClient.Get(u)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error: %s", resp.Status)
+	}
+
+	var task model.Task
+	err = json.NewDecoder(resp.Body).Decode(&task)
+	return &task, err
 }
 
 func (c *Client) AddTask(projectSlug string, task model.Task) (*model.Task, error) {

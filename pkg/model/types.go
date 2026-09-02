@@ -79,7 +79,8 @@ func (t Tier) ShortLabel() string {
 
 type Task struct {
 	ID           string     `json:"id"`
-	ParentID     string     `json:"parent_id,omitempty"` // ID of parent task if this is a subtask
+	ParentID     string     `json:"parent_id,omitempty"`  // ID of parent task if this is a subtask
+	DependsOn    []string   `json:"depends_on,omitempty"` // IDs of tasks this task depends on (blocked by)
 	Title        string     `json:"title"`
 	Description  string     `json:"description"`
 	Size         Size       `json:"size"`
@@ -91,6 +92,27 @@ type Task struct {
 	InsertedAt   time.Time  `json:"inserted_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	TerminatedAt *time.Time `json:"terminated_at,omitempty"`
+}
+
+// IsBlocked returns true if any dependency task is not completed.
+func (t Task) IsBlocked(taskMap map[string]Task) bool {
+	for _, depID := range t.DependsOn {
+		if dep, exists := taskMap[depID]; exists && !dep.Done {
+			return true
+		}
+	}
+	return false
+}
+
+// BlockingTaskIDs returns IDs of incomplete tasks that are currently blocking this task.
+func (t Task) BlockingTaskIDs(taskMap map[string]Task) []string {
+	var blocking []string
+	for _, depID := range t.DependsOn {
+		if dep, exists := taskMap[depID]; exists && !dep.Done {
+			blocking = append(blocking, depID)
+		}
+	}
+	return blocking
 }
 
 func (t *Task) UnmarshalJSON(data []byte) error {
@@ -141,12 +163,14 @@ func (p *Project) UnmarshalJSON(data []byte) error {
 }
 
 type TaskFilter struct {
-	Tier     *Tier   `json:"tier,omitempty"`
-	ParentID *string `json:"parent_id,omitempty"`
-	Size     *Size   `json:"size,omitempty"`
-	Done     *bool   `json:"done,omitempty"`
-	Assignee *string `json:"assignee,omitempty"`
-	Search   string  `json:"search,omitempty"`
+	Tier      *Tier   `json:"tier,omitempty"`
+	ParentID  *string `json:"parent_id,omitempty"`
+	DependsOn *string `json:"depends_on,omitempty"`
+	Blocked   *bool   `json:"blocked,omitempty"`
+	Size      *Size   `json:"size,omitempty"`
+	Done      *bool   `json:"done,omitempty"`
+	Assignee  *string `json:"assignee,omitempty"`
+	Search    string  `json:"search,omitempty"`
 }
 
 type Summary struct {

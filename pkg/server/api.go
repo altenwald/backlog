@@ -20,6 +20,12 @@ func NewAPIHandler(st *store.Store) *APIHandler {
 }
 
 func (h *APIHandler) RegisterRoutes(r chi.Router) {
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusOK, map[string]any{
+			"status":         "ok",
+			"active_project": h.store.GetActiveProjectSlug(),
+		})
+	})
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/projects", h.listProjects)
 		r.Post("/projects", h.createProject)
@@ -191,6 +197,15 @@ func (h *APIHandler) listTasks(w http.ResponseWriter, r *http.Request) {
 		filter.ParentID = &pStr
 	} else if pStr := q.Get("parent"); pStr != "" {
 		filter.ParentID = &pStr
+	}
+	if depStr := q.Get("depends_on"); depStr != "" {
+		filter.DependsOn = &depStr
+	} else if depStr := q.Get("depends"); depStr != "" {
+		filter.DependsOn = &depStr
+	}
+	if bStr := q.Get("blocked"); bStr != "" {
+		blocked := strings.EqualFold(bStr, "true") || bStr == "1"
+		filter.Blocked = &blocked
 	}
 	if sStr := q.Get("size"); sStr != "" {
 		size := model.Size(strings.ToUpper(sStr))
