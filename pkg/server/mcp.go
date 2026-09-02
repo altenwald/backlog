@@ -41,8 +41,14 @@ Follow this standard protocol when interacting with Backlog:
        2) Summary of implementation details and architectural decisions.
        3) Files modified and test verification / coverage results.
 
-4. ESTIMATION AND PRIORITIES:
-   - Priority Tiers: 1 (Blocker) -> 2 (Important) -> 3 (Visual debt) -> 4 (Internal) -> 5 (Future). Always address Tier 1 and 2 tasks first.
+4. ESTIMATION AND PRIORITY TIERS:
+   - Priority Tiers (1 to 5):
+     * Tier 1 (Blocker): Critical issues, broken builds, fatal runtime crashes, or severe regressions blocking development or core functionality. Must be addressed immediately before any other work.
+     * Tier 2 (Important): Key features, primary milestone deliverables, and high-impact bugs. Essential work planned for the current release or sprint cycle.
+     * Tier 3 (Visual debt): UI/UX inconsistencies, styling issues, alignment/spacing glitches, and visual polish that degrade user experience without breaking application logic.
+     * Tier 4 (Internal): Developer tooling, refactoring, test suite improvements, dependency maintenance, CI/CD automation, and internal infrastructure.
+     * Tier 5 (Future): Nice-to-have suggestions, experimental ideas, or deferred feature proposals for future milestones.
+   - Execution rule: Always address Tier 1 and Tier 2 tasks first.
    - Effort Sizes: XS (1 pt), S (2 pts), M (3 pts), L (5 pts), XL (8 pts).
 
 5. REPORTING:
