@@ -41,7 +41,7 @@ var doneCmd = &cobra.Command{
 		if task.Resolution != "" {
 			fmt.Printf("  Resolution: %s\n", task.Resolution)
 		}
-		fmt.Printf("  Remaining open tasks: %d/%d (%d pts)\n", sum.OpenTasks, sum.TotalTasks, sum.OpenPoints)
+		fmt.Printf("  Remaining open tasks: %d/%d\n", sum.OpenTasks, sum.TotalTasks)
 		return nil
 	},
 }
@@ -74,7 +74,7 @@ var undoneCmd = &cobra.Command{
 
 		sum, _ := c.GetSummary(proj)
 		fmt.Printf("↺ Task #%s reopened as pending in '%s': %s\n", task.ID, proj, task.Title)
-		fmt.Printf("  Remaining open tasks: %d/%d (%d pts)\n", sum.OpenTasks, sum.TotalTasks, sum.OpenPoints)
+		fmt.Printf("  Remaining open tasks: %d/%d\n", sum.OpenTasks, sum.TotalTasks)
 		return nil
 	},
 }

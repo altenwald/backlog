@@ -16,7 +16,7 @@ const (
 	SizeXL Size = "XL"
 )
 
-func (s Size) Points() int {
+func (s Size) Weight() int {
 	switch strings.ToUpper(string(s)) {
 	case "XS":
 		return 1
@@ -25,9 +25,9 @@ func (s Size) Points() int {
 	case "M":
 		return 3
 	case "L":
-		return 5
+		return 4
 	case "XL":
-		return 8
+		return 5
 	default:
 		return 3
 	}
@@ -155,8 +155,6 @@ type Summary struct {
 	TotalTasks      int          `json:"total_tasks"`
 	OpenTasks       int          `json:"open_tasks"`
 	CompletedTasks  int          `json:"completed_tasks"`
-	TotalPoints     int          `json:"total_points"`
-	OpenPoints      int          `json:"open_points"`
 	SizeCounts      map[Size]int `json:"size_counts"`       // Total tasks by size
 	OpenSizeCounts  map[Size]int `json:"open_size_counts"`  // Open tasks by size
 	TierCounts      map[Tier]int `json:"tier_counts"`       // Open tasks by tier

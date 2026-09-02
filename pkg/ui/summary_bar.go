@@ -12,7 +12,7 @@ import (
 
 type SummaryBar struct {
 	container    *fyne.Container
-	ptsLabel     *widget.Label
+	statusLabel  *widget.Label
 	chipsRow     *fyne.Container
 	currentSize  *model.Size
 	lastSummary  *model.Summary
@@ -20,14 +20,14 @@ type SummaryBar struct {
 }
 
 func NewSummaryBar(onSizeChange func(size *model.Size)) *SummaryBar {
-	ptsLabel := widget.NewLabelWithStyle("0 open / 0 tasks · 0 pts", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	statusLabel := widget.NewLabelWithStyle("0 open / 0 tasks", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	chipsRow := container.NewHBox()
 
-	row := container.NewHBox(ptsLabel, layout.NewSpacer(), chipsRow)
+	row := container.NewHBox(statusLabel, layout.NewSpacer(), chipsRow)
 
 	return &SummaryBar{
 		container:    row,
-		ptsLabel:     ptsLabel,
+		statusLabel:  statusLabel,
 		chipsRow:     chipsRow,
 		onSizeChange: onSizeChange,
 	}
@@ -46,7 +46,7 @@ func (sb *SummaryBar) Update(sum *model.Summary) {
 	}
 	sb.lastSummary = sum
 
-	sb.ptsLabel.SetText(fmt.Sprintf("%d/%d open (%d pts)", sum.OpenTasks, sum.TotalTasks, sum.OpenPoints))
+	sb.statusLabel.SetText(fmt.Sprintf("%d/%d open", sum.OpenTasks, sum.TotalTasks))
 
 	sb.chipsRow.Objects = nil
 	for _, sz := range []model.Size{model.SizeXL, model.SizeL, model.SizeM, model.SizeS, model.SizeXS} {

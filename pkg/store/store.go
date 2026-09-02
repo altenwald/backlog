@@ -363,12 +363,12 @@ func (s *Store) GetTopPriorities(projectSlug string, limit int) ([]model.Task, e
 		return nil, err
 	}
 
-	// Sort by Tier (ascending: T1 first), then by points (descending)
+	// Sort by Tier (ascending: T1 first), then by size weight (descending)
 	sort.Slice(tasks, func(i, j int) bool {
 		if tasks[i].Tier != tasks[j].Tier {
 			return tasks[i].Tier < tasks[j].Tier
 		}
-		return tasks[i].Size.Points() > tasks[j].Size.Points()
+		return tasks[i].Size.Weight() > tasks[j].Size.Weight()
 	})
 
 	if len(tasks) > limit {
@@ -404,7 +404,6 @@ func (s *Store) GetSummary(projectSlug string) (*model.Summary, error) {
 
 	for _, t := range p.Tasks {
 		summary.TotalTasks++
-		summary.TotalPoints += t.Size.Points()
 		summary.SizeCounts[t.Size]++
 		summary.TotalTierCounts[t.Tier]++
 
@@ -412,7 +411,6 @@ func (s *Store) GetSummary(projectSlug string) (*model.Summary, error) {
 			summary.CompletedTasks++
 		} else {
 			summary.OpenTasks++
-			summary.OpenPoints += t.Size.Points()
 			summary.OpenSizeCounts[t.Size]++
 			summary.TierCounts[t.Tier]++
 		}

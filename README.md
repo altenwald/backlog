@@ -11,7 +11,7 @@
   * Quick-access context menu with **Top 5 highest priority tasks** (T1 -> T2).
   * Fast project switcher and direct shortcut to "+ New Task".
 * **Full Desktop GUI (Fyne)**:
-  * **Summary Metrics Bar**: Total/open story points and breakdown by effort size (`XL`, `L`, `M`, `S`, `XS`).
+  * **Summary Metrics Bar**: Open/total tasks ratio and breakdown by effort size (`XL`, `L`, `M`, `S`, `XS`).
   * **Priority Tier Filters**:
     * `T1 · Blocker` (Red)
     * `T2 · Important` (Orange)
@@ -69,7 +69,7 @@ backlog list --tier 1
 backlog list -g "Core"
 backlog list -p frontend --tier 2
 
-# Display metrics summary and points
+# Display metrics summary
 backlog summary
 
 # Add a new task

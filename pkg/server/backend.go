@@ -7,13 +7,11 @@ import (
 )
 
 type ProjectSummaryItem struct {
-	Slug        string `json:"slug"`
-	Name        string `json:"name"`
-	Active      bool   `json:"active"`
-	OpenTasks   int    `json:"open_tasks"`
-	TotalTasks  int    `json:"total_tasks"`
-	OpenPoints  int    `json:"open_points"`
-	TotalPoints int    `json:"total_points"`
+	Slug       string `json:"slug"`
+	Name       string `json:"name"`
+	Active     bool   `json:"active"`
+	OpenTasks  int    `json:"open_tasks"`
+	TotalTasks int    `json:"total_tasks"`
 }
 
 type Backend interface {
@@ -49,21 +47,17 @@ func (b *storeBackend) ListProjects() ([]ProjectSummaryItem, error) {
 	var items []ProjectSummaryItem
 	for _, p := range projects {
 		sum, _ := b.st.GetSummary(p.Slug)
-		openTasks, totalTasks, openPts, totalPts := 0, 0, 0, 0
+		openTasks, totalTasks := 0, 0
 		if sum != nil {
 			openTasks = sum.OpenTasks
 			totalTasks = sum.TotalTasks
-			openPts = sum.OpenPoints
-			totalPts = sum.TotalPoints
 		}
 		items = append(items, ProjectSummaryItem{
-			Slug:        p.Slug,
-			Name:        p.Name,
-			Active:      p.Slug == active,
-			OpenTasks:   openTasks,
-			TotalTasks:  totalTasks,
-			OpenPoints:  openPts,
-			TotalPoints: totalPts,
+			Slug:       p.Slug,
+			Name:       p.Name,
+			Active:     p.Slug == active,
+			OpenTasks:  openTasks,
+			TotalTasks: totalTasks,
 		})
 	}
 	return items, nil
@@ -152,21 +146,17 @@ func (b *clientBackend) ListProjects() ([]ProjectSummaryItem, error) {
 	}
 	var items []ProjectSummaryItem
 	for _, p := range projects {
-		openTasks, totalTasks, openPts, totalPts := 0, 0, 0, 0
+		openTasks, totalTasks := 0, 0
 		if p.Summary != nil {
 			openTasks = p.Summary.OpenTasks
 			totalTasks = p.Summary.TotalTasks
-			openPts = p.Summary.OpenPoints
-			totalPts = p.Summary.TotalPoints
 		}
 		items = append(items, ProjectSummaryItem{
-			Slug:        p.Slug,
-			Name:        p.Name,
-			Active:      p.Active,
-			OpenTasks:   openTasks,
-			TotalTasks:  totalTasks,
-			OpenPoints:  openPts,
-			TotalPoints: totalPts,
+			Slug:       p.Slug,
+			Name:       p.Name,
+			Active:     p.Active,
+			OpenTasks:  openTasks,
+			TotalTasks: totalTasks,
 		})
 	}
 	return items, nil

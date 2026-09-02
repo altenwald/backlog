@@ -50,8 +50,6 @@ var summaryCmd = &cobra.Command{
 		fmt.Println(strings.Repeat("─", 50))
 		fmt.Printf("  • Open Tasks:           %d / %d (%.1f%% completed)\n",
 			sum.OpenTasks, sum.TotalTasks, float64(sum.CompletedTasks)/float64(sum.TotalTasks)*100)
-		fmt.Printf("  • Pending Points:       %d pts / %d pts total\n",
-			sum.OpenPoints, sum.TotalPoints)
 		fmt.Println()
 		fmt.Println("  Priority (Open / Total by Tier):")
 		fmt.Printf("    T1 · Blocker:      %d / %d\n", sum.TierCounts[model.Tier1], sum.TotalTierCounts[model.Tier1])
@@ -62,7 +60,7 @@ var summaryCmd = &cobra.Command{
 		fmt.Println()
 		fmt.Println("  Effort Breakdown by Size (Open / Total):")
 		for _, s := range []model.Size{model.SizeXL, model.SizeL, model.SizeM, model.SizeS, model.SizeXS} {
-			fmt.Printf("    %-2s (%d pts): %d / %d tasks\n", s, s.Points(), sum.OpenSizeCounts[s], sum.SizeCounts[s])
+			fmt.Printf("    %-2s: %d / %d tasks\n", s, sum.OpenSizeCounts[s], sum.SizeCounts[s])
 		}
 
 		return nil

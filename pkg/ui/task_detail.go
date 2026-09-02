@@ -142,7 +142,7 @@ func (dv *TaskDetailView) ShowTask(task model.Task) {
 	// Badges
 	dv.badgesRow.Objects = nil
 	tierBadge := MakeBadge(task.Tier.Label(), TierColor(task.Tier), color.White)
-	sizeBadge := MakeBadge(fmt.Sprintf("%s · %d pts", task.Size, task.Size.Points()), SizeColor(task.Size), color.White)
+	sizeBadge := MakeBadge(string(task.Size), SizeColor(task.Size), color.White)
 	dv.badgesRow.Add(tierBadge)
 	dv.badgesRow.Add(sizeBadge)
 

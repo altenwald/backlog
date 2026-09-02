@@ -79,7 +79,7 @@ var listCmd = &cobra.Command{
 			sum, _ = st.GetSummary(proj)
 		}
 
-		fmt.Printf("📂 Project: %s (%d/%d open · %d points)\n", strings.ToUpper(proj), sum.OpenTasks, sum.TotalTasks, sum.OpenPoints)
+		fmt.Printf("📂 Project: %s (%d/%d open)\n", strings.ToUpper(proj), sum.OpenTasks, sum.TotalTasks)
 		fmt.Println(strings.Repeat("─", 72))
 
 		if len(tasks) == 0 {

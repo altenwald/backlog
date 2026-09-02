@@ -74,7 +74,7 @@ var addCmd = &cobra.Command{
 
 		sum, _ := c.GetSummary(proj)
 		fmt.Printf("✔ Task #%s created in '%s' [%s] [%s]: %s\n", task.ID, proj, task.Size, task.Tier.ShortLabel(), task.Title)
-		fmt.Printf("  Current status: %d/%d open (%d pts)\n", sum.OpenTasks, sum.TotalTasks, sum.OpenPoints)
+		fmt.Printf("  Current status: %d/%d open\n", sum.OpenTasks, sum.TotalTasks)
 		return nil
 	},
 }

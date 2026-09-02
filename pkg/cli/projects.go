@@ -29,14 +29,12 @@ var projectsCmd = &cobra.Command{
 				}
 				open := 0
 				total := 0
-				pts := 0
 				if p.Summary != nil {
 					open = p.Summary.OpenTasks
 					total = p.Summary.TotalTasks
-					pts = p.Summary.OpenPoints
 				}
-				fmt.Printf("%s%-12s (%-15s) %3d/%-3d open  (%3d open pts)\n",
-					activeIndicator, p.Slug, p.Name, open, total, pts)
+				fmt.Printf("%s%-12s (%-15s) %3d/%-3d open\n",
+					activeIndicator, p.Slug, p.Name, open, total)
 			}
 		} else {
 			st, err := store.NewStore(flagDataDir)
@@ -52,14 +50,12 @@ var projectsCmd = &cobra.Command{
 				sum, _ := st.GetSummary(p.Slug)
 				open := 0
 				total := 0
-				pts := 0
 				if sum != nil {
 					open = sum.OpenTasks
 					total = sum.TotalTasks
-					pts = sum.OpenPoints
 				}
-				fmt.Printf("%s%-12s (%-15s) %3d/%-3d open  (%3d open pts)\n",
-					activeIndicator, p.Slug, p.Name, open, total, pts)
+				fmt.Printf("%s%-12s (%-15s) %3d/%-3d open\n",
+					activeIndicator, p.Slug, p.Name, open, total)
 			}
 		}
 

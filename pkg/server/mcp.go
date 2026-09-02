@@ -49,7 +49,7 @@ Follow this standard protocol when interacting with Backlog:
      * Tier 4 (Internal): Developer tooling, refactoring, test suite improvements, dependency maintenance, CI/CD automation, and internal infrastructure.
      * Tier 5 (Future): Nice-to-have suggestions, experimental ideas, or deferred feature proposals for future milestones.
    - Execution rule: Always address Tier 1 and Tier 2 tasks first.
-   - Effort Sizes: XS (1 pt), S (2 pts), M (3 pts), L (5 pts), XL (8 pts).
+   - Effort Sizes: XS, S, M, L, XL.
 
 5. REPORTING:
    - Always inform the user when claiming a task, report test coverage results, and report completion with the commit hash and resolution summary.`
@@ -144,7 +144,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 	s.AddTool(
 		mcp.NewTool(
 			"list_projects",
-			mcp.WithDescription("List all registered projects in Backlog with metrics, open tasks, points, and active status."),
+			mcp.WithDescription("List all registered projects in Backlog with metrics, open tasks, and active status."),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			items, err := be.ListProjects()
@@ -296,7 +296,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 	s.AddTool(
 		mcp.NewTool(
 			"get_summary",
-			mcp.WithDescription("Get metric summary, total/open points, and breakdown by size and tier for a project."),
+			mcp.WithDescription("Get metric summary, open/total tasks, and breakdown by size and tier for a project."),
 			mcp.WithString("project", mcp.Description("Project slug (optional; defaults to active project)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -398,8 +398,8 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			}
 
 			sum, _ := be.GetSummary(project)
-			return mcp.NewToolResultText(fmt.Sprintf("✔ Task created in '%s': #%s [%s] [%s] %s\nProject status: %d/%d open (%d pts)",
-				project, task.ID, task.Size, task.Tier.ShortLabel(), task.Title, sum.OpenTasks, sum.TotalTasks, sum.OpenPoints)), nil
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Task created in '%s': #%s [%s] [%s] %s\nProject status: %d/%d open",
+				project, task.ID, task.Size, task.Tier.ShortLabel(), task.Title, sum.OpenTasks, sum.TotalTasks)), nil
 		},
 	)
 
@@ -500,8 +500,8 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			if task.Resolution != "" {
 				resInfo = fmt.Sprintf("\nResolution: %s", task.Resolution)
 			}
-			return mcp.NewToolResultText(fmt.Sprintf("✔ Task #%s %s in '%s': %s%s\nRemaining status: %d/%d open (%d pts)",
-				task.ID, statusStr, project, task.Title, resInfo, sum.OpenTasks, sum.TotalTasks, sum.OpenPoints)), nil
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Task #%s %s in '%s': %s%s\nRemaining status: %d/%d open",
+				task.ID, statusStr, project, task.Title, resInfo, sum.OpenTasks, sum.TotalTasks)), nil
 		},
 	)
 
