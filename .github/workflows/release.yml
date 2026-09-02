@@ -134,7 +134,7 @@ jobs:
         with:
           usesh: true
           prepare: |
-            pkg install -y go git libGL xorg-libraries
+            pkg install -y go git gcc pkgconf xorg libglvnd
           run: |
             TAG="${{ github.ref_name || inputs.tag_name }}"
             COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
