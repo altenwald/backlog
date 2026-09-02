@@ -141,6 +141,76 @@ func TestMCPServerTools(t *testing.T) {
 	if !strings.Contains(string(createRespBytes), "created successfully") {
 		t.Fatalf("expected created successfully, got %s", string(createRespBytes))
 	}
+
+	// 7. Test add_task with parent_id and depends_on via MCP
+	addTaskMsg := []byte(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"add_task","arguments":{"project":"newproj","title":"MCP Root","tier":2,"size":"M"}}}`)
+	addResp := srv.HandleMessage(context.Background(), addTaskMsg)
+	addRespBytes, _ := json.Marshal(addResp)
+	if !strings.Contains(string(addRespBytes), "Task created in 'newproj'") {
+		t.Fatalf("expected task created, got %s", string(addRespBytes))
+	}
+
+	addSubMsg := []byte(`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"add_task","arguments":{"project":"newproj","title":"MCP Child","parent_id":"1","depends_on":"1","tier":1,"size":"S"}}}`)
+	addSubResp := srv.HandleMessage(context.Background(), subTaskBytes(srv, addSubMsg))
+	_ = addSubResp
+
+	// 8. Test list_tasks via MCP with blocked filter
+	listMsg := []byte(`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"list_tasks","arguments":{"project":"newproj","blocked":true}}}`)
+	listResp := srv.HandleMessage(context.Background(), listMsg)
+	listRespBytes, _ := json.Marshal(listResp)
+	if !strings.Contains(string(listRespBytes), "MCP Child") {
+		t.Fatalf("expected blocked list to contain MCP Child, got %s", string(listRespBytes))
+	}
+
+	// 9. Test update_task via MCP
+	updateMsg := []byte(`{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"update_task","arguments":{"project":"newproj","task_id":"1","title":"MCP Root Updated"}}}`)
+	updateResp := srv.HandleMessage(context.Background(), updateMsg)
+	updateRespBytes, _ := json.Marshal(updateResp)
+	if !strings.Contains(string(updateRespBytes), "updated in 'newproj'") {
+		t.Fatalf("expected task updated, got %s", string(updateRespBytes))
+	}
+
+	// 10. Test get_summary & get_top_priorities via MCP
+	sumMsg := []byte(`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"get_summary","arguments":{"project":"newproj"}}}`)
+	sumResp := srv.HandleMessage(context.Background(), sumMsg)
+	sumRespBytes, _ := json.Marshal(sumResp)
+	if !strings.Contains(string(sumRespBytes), "total_tasks") {
+		t.Fatalf("expected summary json, got %s", string(sumRespBytes))
+	}
+
+	topMsg := []byte(`{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"get_top_priorities","arguments":{"project":"newproj","limit":2}}}`)
+	topResp := srv.HandleMessage(context.Background(), topMsg)
+	topRespBytes, _ := json.Marshal(topResp)
+	if !strings.Contains(string(topRespBytes), "MCP Root") {
+		t.Fatalf("expected top priorities, got %s", string(topRespBytes))
+	}
+
+	// 11. Test list_projects & set_active_project via MCP
+	listProjsMsg := []byte(`{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"list_projects","arguments":{}}}`)
+	listProjsResp := srv.HandleMessage(context.Background(), listProjsMsg)
+	listProjsBytes, _ := json.Marshal(listProjsResp)
+	if !strings.Contains(string(listProjsBytes), "newproj") {
+		t.Fatalf("expected newproj in list, got %s", string(listProjsBytes))
+	}
+
+	setActiveMsg := []byte(`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"set_active_project","arguments":{"project":"newproj"}}}`)
+	setActiveResp := srv.HandleMessage(context.Background(), setActiveMsg)
+	setActiveBytes, _ := json.Marshal(setActiveResp)
+	if !strings.Contains(string(setActiveBytes), "switched to") {
+		t.Fatalf("expected active project set, got %s", string(setActiveBytes))
+	}
+
+	// 12. Test complete_task via MCP
+	completeMsg := []byte(`{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"complete_task","arguments":{"project":"newproj","task_id":"1","resolution":"done via mcp"}}}`)
+	completeResp := srv.HandleMessage(context.Background(), completeMsg)
+	completeBytes, _ := json.Marshal(completeResp)
+	if !strings.Contains(string(completeBytes), "completed in 'newproj'") {
+		t.Fatalf("expected completed, got %s", string(completeBytes))
+	}
+}
+
+func subTaskBytes(srv any, msg []byte) []byte {
+	return msg
 }
 
 func TestMCPServerWithClientBackend(t *testing.T) {
