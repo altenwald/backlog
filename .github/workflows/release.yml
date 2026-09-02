@@ -1,0 +1,203 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name to release (e.g. v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS Universal
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache: true
+
+      - name: Build macOS Universal Bundle
+        run: |
+          make bundle
+
+      - name: Package macOS artifacts
+        run: |
+          TAG="${{ github.ref_name || inputs.tag_name }}"
+          mkdir -p dist
+          # Archive the Backlog.app bundle
+          (cd bin && zip -r -y "../dist/backlog-${TAG}-darwin-universal.zip" "Backlog.app")
+          # Archive the standalone universal CLI binary
+          tar -czvf "dist/backlog-${TAG}-darwin-universal.tar.gz" -C bin backlog
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: dist/*
+          retention-days: 1
+
+  build-linux:
+    name: Build Linux amd64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache: true
+
+      - name: Install Linux dependencies for Fyne
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev
+
+      - name: Build Linux binary
+        run: |
+          TAG="${{ github.ref_name || inputs.tag_name }}"
+          COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          LDFLAGS="-s -w -X github.com/altenwald/backlog/pkg/version.Version=${TAG} -X github.com/altenwald/backlog/pkg/version.GitCommit=${COMMIT} -X github.com/altenwald/backlog/pkg/version.BuildDate=${BUILD_DATE}"
+          mkdir -p bin dist
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/backlog ./cmd/backlog
+          tar -czvf "dist/backlog-${TAG}-linux-amd64.tar.gz" -C bin backlog
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: dist/*
+          retention-days: 1
+
+  build-windows:
+    name: Build Windows amd64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache: true
+
+      - name: Build Windows binary
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name || inputs.tag_name }}"
+          COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          LDFLAGS="-s -w -X github.com/altenwald/backlog/pkg/version.Version=${TAG} -X github.com/altenwald/backlog/pkg/version.GitCommit=${COMMIT} -X github.com/altenwald/backlog/pkg/version.BuildDate=${BUILD_DATE}"
+          mkdir -p bin dist
+          CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/backlog.exe ./cmd/backlog
+          (cd bin && 7z a "../dist/backlog-${TAG}-windows-amd64.zip" backlog.exe)
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: dist/*
+          retention-days: 1
+
+  build-freebsd:
+    name: Build FreeBSD amd64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build FreeBSD binary in VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            pkg install -y go git libGL xorg-libraries
+          run: |
+            TAG="${{ github.ref_name || inputs.tag_name }}"
+            COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+            BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            LDFLAGS="-s -w -X github.com/altenwald/backlog/pkg/version.Version=${TAG} -X github.com/altenwald/backlog/pkg/version.GitCommit=${COMMIT} -X github.com/altenwald/backlog/pkg/version.BuildDate=${BUILD_DATE}"
+            mkdir -p bin dist
+            CGO_ENABLED=1 go build -ldflags="${LDFLAGS}" -o bin/backlog ./cmd/backlog
+            tar -czvf "dist/backlog-${TAG}-freebsd-amd64.tar.gz" -C bin backlog
+
+      - name: Upload FreeBSD artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: freebsd-artifacts
+          path: dist/*
+          retention-days: 1
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-macos, build-linux, build-windows, build-freebsd]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Extract Tag Message & Generate Checksums
+        id: prep
+        run: |
+          TAG="${{ github.ref_name || inputs.tag_name }}"
+          git fetch --tags --force
+          
+          # Extract the annotated tag body or subject
+          TAG_MSG=$(git tag -l --format='%(contents)' "${TAG}")
+          if [ -z "$TAG_MSG" ]; then
+            TAG_MSG=$(git tag -l --format='%(subject)' "${TAG}")
+          fi
+          if [ -z "$TAG_MSG" ]; then
+            TAG_MSG="Release ${TAG}"
+          fi
+
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+          echo "$TAG_MSG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          # Generate SHA256 checksums
+          cd release-assets
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name || inputs.tag_name }}
+          tag_name: ${{ github.ref_name || inputs.tag_name }}
+          body: ${{ env.RELEASE_NOTES }}
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

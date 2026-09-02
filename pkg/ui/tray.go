@@ -119,6 +119,12 @@ func (tm *TrayManager) Refresh() {
 		}
 	})
 
+	aboutItem := fyne.NewMenuItem("ℹ️ About Backlog", func() {
+		tm.window.Show()
+		tm.window.RequestFocus()
+		ShowAboutDialog(tm.window)
+	})
+
 	// Set IsQuit to true to avoid duplicate localized system quit item
 	quitItem := fyne.NewMenuItem("Quit Backlog", func() {
 		tm.app.Quit()
@@ -130,6 +136,7 @@ func (tm *TrayManager) Refresh() {
 		addItem,
 		projectsSubmenu,
 		fyne.NewMenuItemSeparator(),
+		aboutItem,
 		quitItem,
 	}
 

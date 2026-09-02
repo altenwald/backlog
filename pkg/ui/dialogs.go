@@ -2,13 +2,17 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
+	"github.com/altenwald/backlog/pkg/version"
 )
 
 func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task model.Task)) {
@@ -222,4 +226,77 @@ func ShowDeleteProjectDialog(parent fyne.Window, projectName, projectSlug string
 			onConfirm()
 		}
 	}, parent)
+}
+
+func ShowAboutDialog(parent fyne.Window) {
+	iconImg := canvas.NewImageFromResource(GetAppIconResource())
+	iconImg.SetMinSize(fyne.NewSize(72, 72))
+	iconImg.FillMode = canvas.ImageFillContain
+
+	titleLabel := widget.NewLabelWithStyle("Backlog", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+
+	versionStr := fmt.Sprintf("Version %s", version.Version)
+	if version.GitCommit != "" && version.GitCommit != "none" {
+		versionStr += fmt.Sprintf(" (%s)", version.GitCommit)
+	}
+	versionLabel := widget.NewLabelWithStyle(versionStr, fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
+
+	descLabel := widget.NewLabelWithStyle(
+		"Developer-centric task & priority manager\nwith System Tray and MCP integration",
+		fyne.TextAlignCenter,
+		fyne.TextStyle{},
+	)
+
+	copyrightLabel := widget.NewLabelWithStyle(
+		"Copyright © 2026 Altenwald Solutions, S.L.U.\nAuthor: Manuel Rubio",
+		fyne.TextAlignCenter,
+		fyne.TextStyle{},
+	)
+
+	altenwaldURL, _ := url.Parse("https://altenwald.com")
+	altenwaldLink := widget.NewHyperlink("altenwald.com", altenwaldURL)
+
+	githubURL, _ := url.Parse("https://github.com/altenwald/backlog")
+	githubLink := widget.NewHyperlink("github.com/altenwald/backlog", githubURL)
+
+	linksBox := container.NewHBox(
+		altenwaldLink,
+		widget.NewLabel("·"),
+		githubLink,
+	)
+	linksCenter := container.NewCenter(linksBox)
+
+	licenseEntry := widget.NewMultiLineEntry()
+	licenseEntry.Wrapping = fyne.TextWrapWord
+	licenseEntry.SetMinRowsVisible(6)
+	licenseEntry.SetText(`MIT License
+
+Copyright (c) 2026 Altenwald Solutions, S.L.U. / Manuel Rubio
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.`)
+	licenseEntry.Disable()
+
+	licenseAccordion := widget.NewAccordion(
+		widget.NewAccordionItem("📜 View License (MIT)", licenseEntry),
+	)
+
+	content := container.NewVBox(
+		container.NewCenter(iconImg),
+		titleLabel,
+		versionLabel,
+		widget.NewSeparator(),
+		descLabel,
+		copyrightLabel,
+		linksCenter,
+		widget.NewSeparator(),
+		licenseAccordion,
+	)
+
+	d := dialog.NewCustom("About Backlog", "Close", content, parent)
+	d.Resize(fyne.NewSize(480, 520))
+	d.Show()
 }

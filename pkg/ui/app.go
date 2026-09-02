@@ -31,9 +31,13 @@ type BacklogApp struct {
 	selectedTaskID string
 }
 
+func GetAppIconResource() fyne.Resource {
+	return fyne.NewStaticResource("icon.png", appIconBytes)
+}
+
 func NewBacklogApp(st *store.Store) *BacklogApp {
 	a := app.NewWithID("com.altenwald.backlog")
-	iconRes := fyne.NewStaticResource("icon.png", appIconBytes)
+	iconRes := GetAppIconResource()
 	a.SetIcon(iconRes)
 
 	w := a.NewWindow("Backlog")
@@ -47,6 +51,14 @@ func NewBacklogApp(st *store.Store) *BacklogApp {
 	}
 
 	bApp.buildUI()
+
+	// Set Main Menu with About item (intercepts macOS "About Backlog")
+	aboutMenuItem := fyne.NewMenuItem("About", func() {
+		ShowAboutDialog(w)
+	})
+	appMenu := fyne.NewMenu("Backlog", aboutMenuItem)
+	mainMenu := fyne.NewMainMenu(appMenu)
+	w.SetMainMenu(mainMenu)
 
 	// Stay resident in tray on window close
 	w.SetCloseIntercept(func() {

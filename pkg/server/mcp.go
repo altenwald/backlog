@@ -9,6 +9,7 @@ import (
 
 	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/store"
+	"github.com/altenwald/backlog/pkg/version"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -54,7 +55,7 @@ func NewMCPServer(st *store.Store) *server.MCPServer {
 func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 	s := server.NewMCPServer(
 		"backlog",
-		"1.0.0",
+		version.Version,
 		server.WithLogging(),
 		server.WithInstructions(BacklogInstructions),
 	)
