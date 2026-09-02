@@ -3,7 +3,10 @@ package ui_test
 import (
 	"image/color"
 	"testing"
+	"time"
 
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/test"
 	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/ui"
@@ -93,7 +96,6 @@ func TestTaskDetailView(t *testing.T) {
 		Resolution:  "Fixed with PR #42",
 		Size:        model.SizeL,
 		Tier:        model.Tier1,
-		Tag:         "v1.0",
 		Assignee:    "manuel",
 	}
 
@@ -137,11 +139,14 @@ func TestTaskItemAndRow(t *testing.T) {
 func TestMarkdownView(t *testing.T) {
 	_ = test.NewApp()
 
-	md := "# Header 1\n## Header 2\n### Header 3\n* list item\n`inline code`\n```\nblock code\n```\nNormal text with **bold** and *italic*."
+	md := "# Header 1\n## Header 2\n### Header 3\n* list item\n`inline code`\n```\nblock code\n```\nNormal text with **bold** and *italic*.\nThis is a long line of description that ends with an inline code token `client.ListTasks(param1, param2)` without breaking vertically."
 	rendered := ui.RenderMarkdown(md)
 	if rendered == nil {
 		t.Fatal("expected RenderMarkdown to return canvas object")
 	}
+
+	w := test.NewWindow(rendered)
+	w.Resize(fyne.NewSize(300, 400))
 }
 
 func TestBadgesAndColors(t *testing.T) {
@@ -174,3 +179,84 @@ func TestBadgesAndColors(t *testing.T) {
 		t.Fatal("expected badge to not be nil")
 	}
 }
+
+func TestBurnUpChart(t *testing.T) {
+	_ = test.NewApp()
+
+	chart := ui.NewBurnUpChart()
+	if chart.Container == nil {
+		t.Fatal("expected chart container to not be nil")
+	}
+
+	// 1. Empty tasks update
+	chart.Update([]model.Task{})
+
+	// 2. Tasks with history
+	now := time.Now()
+	twoDaysAgo := now.Add(-48 * time.Hour)
+	oneDayAgo := now.Add(-24 * time.Hour)
+
+	tasks := []model.Task{
+		{
+			ID:           "1",
+			Title:        "Old task completed",
+			InsertedAt:   twoDaysAgo,
+			TerminatedAt: &oneDayAgo,
+			Done:         true,
+		},
+		{
+			ID:           "2",
+			Title:        "Recent task completed",
+			InsertedAt:   oneDayAgo,
+			TerminatedAt: &now,
+			Done:         true,
+		},
+		{
+			ID:         "3",
+			Title:      "Pending open task",
+			InsertedAt: oneDayAgo,
+			Done:       false,
+		},
+	}
+
+	chart.Update(tasks)
+
+	// 3. Test CalculateBurnUpPoints
+	ptsEmpty := ui.CalculateBurnUpPoints([]model.Task{})
+	if len(ptsEmpty) == 0 {
+		t.Fatal("expected at least 1 point for empty tasks")
+	}
+
+	pts := ui.CalculateBurnUpPoints(tasks)
+	if len(pts) < 2 {
+		t.Fatalf("expected multiple points across timeline, got %d", len(pts))
+	}
+
+	firstPt := pts[0]
+	lastPt := pts[len(pts)-1]
+
+	if lastPt.Total != 3 {
+		t.Fatalf("expected final total 3, got %d", lastPt.Total)
+	}
+	if lastPt.Completed != 2 {
+		t.Fatalf("expected final completed 2, got %d", lastPt.Completed)
+	}
+	if firstPt.Total > lastPt.Total {
+		t.Fatal("burn up total scope cannot decrease")
+	}
+
+	// 4. Test inside window with layout resize
+	w := test.NewWindow(chart.Container)
+	w.Resize(fyne.NewSize(400, 300))
+
+	// 5. Test hover and tap interaction
+	if h, ok := chart.ChartWidget().(desktop.Hoverable); ok {
+		h.MouseIn(&desktop.MouseEvent{PointEvent: fyne.PointEvent{Position: fyne.NewPos(100, 50)}})
+		h.MouseMoved(&desktop.MouseEvent{PointEvent: fyne.PointEvent{Position: fyne.NewPos(200, 50)}})
+		h.MouseOut()
+	}
+	if tObj, ok := chart.ChartWidget().(fyne.Tappable); ok {
+		tObj.Tapped(&fyne.PointEvent{Position: fyne.NewPos(150, 50)})
+	}
+}
+

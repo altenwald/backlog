@@ -27,6 +27,7 @@ type BacklogApp struct {
 
 	tasksList      *widget.List
 	detailView     *TaskDetailView
+	burnUpChart    *BurnUpChart
 	displayedTasks []model.Task
 	selectedTaskID string
 }
@@ -194,11 +195,18 @@ func (ba *BacklogApp) buildUI() {
 			ba.detailView.Clear()
 		},
 	}
+	ba.burnUpChart = NewBurnUpChart()
 	ba.detailView = NewTaskDetailView(detailCallbacks)
-	rightPane := container.NewPadded(ba.detailView.Container)
+
+	// Horizontal split for right pane: Burn-up chart on top, Task detail on bottom
+	rightSplit := container.NewVSplit(
+		container.NewPadded(ba.burnUpChart.Container),
+		container.NewPadded(ba.detailView.Container),
+	)
+	rightSplit.SetOffset(0.36)
 
 	// Master-detail Split view
-	split := container.NewHSplit(leftPane, rightPane)
+	split := container.NewHSplit(leftPane, rightSplit)
 	split.SetOffset(0.44)
 
 	ba.window.SetContent(split)
@@ -248,6 +256,13 @@ func (ba *BacklogApp) refreshTasks() {
 
 	ba.displayedTasks = tasks
 	ba.tasksList.Refresh()
+
+	// Update Burn-up chart with full project scope
+	if ba.burnUpChart != nil {
+		if allTasks, err := ba.store.ListTasks(activeSlug, model.TaskFilter{}); err == nil {
+			ba.burnUpChart.Update(allTasks)
+		}
+	}
 
 	if len(ba.displayedTasks) == 0 {
 		ba.selectedTaskID = ""

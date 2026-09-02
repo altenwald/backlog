@@ -67,8 +67,9 @@ func RenderMarkdown(content string) fyne.CanvasObject {
 		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") || strings.HasPrefix(trimmed, "• ") {
 			itemText := strings.TrimSpace(trimmed[2:])
 			bullet := widget.NewLabelWithStyle("•", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-			itemWidget := createInlineRichText(itemText)
-			row := container.NewBorder(nil, nil, bullet, nil, itemWidget)
+			itemLabel := widget.NewLabel(itemText)
+			itemLabel.Wrapping = fyne.TextWrapWord
+			row := container.NewBorder(nil, nil, bullet, nil, itemLabel)
 			box.Add(row)
 			continue
 		}
@@ -78,15 +79,17 @@ func RenderMarkdown(content string) fyne.CanvasObject {
 			numPrefix := trimmed[:2]
 			itemText := strings.TrimSpace(trimmed[3:])
 			numLabel := widget.NewLabelWithStyle(numPrefix, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-			itemWidget := createInlineRichText(itemText)
-			row := container.NewBorder(nil, nil, numLabel, nil, itemWidget)
+			itemLabel := widget.NewLabel(itemText)
+			itemLabel.Wrapping = fyne.TextWrapWord
+			row := container.NewBorder(nil, nil, numLabel, nil, itemLabel)
 			box.Add(row)
 			continue
 		}
 
-		// Standard paragraph with inline backtick and bold parsing
-		paraWidget := createInlineRichText(trimmed)
-		box.Add(paraWidget)
+		// Standard paragraphs
+		paraLabel := widget.NewLabel(trimmed)
+		paraLabel.Wrapping = fyne.TextWrapWord
+		box.Add(paraLabel)
 	}
 
 	// Flush unclosed code block if any
@@ -103,96 +106,4 @@ func RenderMarkdown(content string) fyne.CanvasObject {
 	}
 
 	return box
-}
-
-func createInlineRichText(text string) *widget.RichText {
-	segs := parseInlineSpans(text)
-	rt := widget.NewRichText(segs...)
-	rt.Wrapping = fyne.TextWrapWord
-	return rt
-}
-
-// parseInlineSpans extracts backtick code (`code`) and bold (**bold**) spans into rich text segments.
-func parseInlineSpans(text string) []widget.RichTextSegment {
-	var segs []widget.RichTextSegment
-	runes := []rune(text)
-	n := len(runes)
-
-	start := 0
-	i := 0
-
-	for i < n {
-		if runes[i] == '`' {
-			// Flush previous text
-			if i > start {
-				segs = append(segs, &widget.TextSegment{
-					Text:  string(runes[start:i]),
-					Style: widget.RichTextStyleInline,
-				})
-			}
-			// Search for closing backtick
-			end := i + 1
-			for end < n && runes[end] != '`' {
-				end++
-			}
-			if end < n && runes[end] == '`' {
-				codeContent := string(runes[i+1 : end])
-				segs = append(segs, &widget.TextSegment{
-					Text:  codeContent,
-					Style: widget.RichTextStyleCodeInline,
-				})
-				i = end + 1
-				start = i
-				continue
-			} else {
-				i++
-				continue
-			}
-		} else if i+1 < n && runes[i] == '*' && runes[i+1] == '*' {
-			// Flush previous text
-			if i > start {
-				segs = append(segs, &widget.TextSegment{
-					Text:  string(runes[start:i]),
-					Style: widget.RichTextStyleInline,
-				})
-			}
-			// Search for closing **
-			end := i + 2
-			for end+1 < n && !(runes[end] == '*' && runes[end+1] == '*') {
-				end++
-			}
-			if end+1 < n && runes[end] == '*' && runes[end+1] == '*' {
-				boldContent := string(runes[i+2 : end])
-				segs = append(segs, &widget.TextSegment{
-					Text:  boldContent,
-					Style: widget.RichTextStyleStrong,
-				})
-				i = end + 2
-				start = i
-				continue
-			} else {
-				i++
-				continue
-			}
-		} else {
-			i++
-		}
-	}
-
-	// Flush trailing text
-	if start < n {
-		segs = append(segs, &widget.TextSegment{
-			Text:  string(runes[start:]),
-			Style: widget.RichTextStyleInline,
-		})
-	}
-
-	if len(segs) == 0 {
-		segs = append(segs, &widget.TextSegment{
-			Text:  text,
-			Style: widget.RichTextStyleInline,
-		})
-	}
-
-	return segs
 }

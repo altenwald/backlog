@@ -44,7 +44,7 @@ func NewTaskRowItem(onToggleDone func(taskID string, done bool)) *TaskRowItem {
 
 	// Tier badge
 	item.tierText = canvas.NewText("T3", color.White)
-	item.tierText.TextStyle = fyne.TextStyle{Bold: true, Monospace: true}
+	item.tierText.TextStyle = fyne.TextStyle{Bold: true}
 	item.tierText.TextSize = 10
 	item.tierText.Alignment = fyne.TextAlignCenter
 	item.tierBox = canvas.NewRectangle(TierColor(model.Tier3))
@@ -53,7 +53,7 @@ func NewTaskRowItem(onToggleDone func(taskID string, done bool)) *TaskRowItem {
 
 	// Size badge
 	item.sizeText = canvas.NewText("M", color.White)
-	item.sizeText.TextStyle = fyne.TextStyle{Bold: true, Monospace: true}
+	item.sizeText.TextStyle = fyne.TextStyle{Bold: true}
 	item.sizeText.TextSize = 10
 	item.sizeText.Alignment = fyne.TextAlignCenter
 	item.sizeBox = canvas.NewRectangle(SizeColor(model.SizeM))
@@ -68,7 +68,7 @@ func NewTaskRowItem(onToggleDone func(taskID string, done bool)) *TaskRowItem {
 
 	// Assignee badge
 	item.assignText = canvas.NewText("@user", color.White)
-	item.assignText.TextStyle = fyne.TextStyle{Bold: true, Monospace: true}
+	item.assignText.TextStyle = fyne.TextStyle{Bold: true}
 	item.assignText.TextSize = 9.5
 	item.assignText.Alignment = fyne.TextAlignCenter
 	item.assignBox = canvas.NewRectangle(AssigneeBadgeColor())
