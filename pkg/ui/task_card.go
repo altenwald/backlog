@@ -177,12 +177,6 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 		textCol.Add(container.NewVBox(toggleRow, mdContainer))
 	}
 
-	tagText := ""
-	if task.Tag != "" {
-		tagText = task.Tag
-	}
-	tagLabel := widget.NewLabelWithStyle(tagText, fyne.TextAlignTrailing, fyne.TextStyle{Monospace: true})
-
 	var parentBadge fyne.CanvasObject
 	if task.ParentID != "" {
 		parentBadge = MakeBadge("↳ #"+task.ParentID, color.NRGBA{R: 55, G: 75, B: 105, A: 255}, color.White)
@@ -214,7 +208,7 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	})
 	deleteBtn.Importance = widget.DangerImportance
 
-	// Ensure parent badge, dep badge, assignee, buttons and tags are always flushed cleanly to the right edge
+	// Ensure parent badge, dep badge, assignee and buttons are always flushed cleanly to the right edge
 	tagRowItems := []fyne.CanvasObject{layout.NewSpacer()}
 	if parentBadge != nil {
 		tagRowItems = append(tagRowItems, parentBadge)
@@ -224,9 +218,6 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	}
 	if assigneeBadge != nil {
 		tagRowItems = append(tagRowItems, assigneeBadge)
-	}
-	if tagLabel.Text != "" {
-		tagRowItems = append(tagRowItems, tagLabel)
 	}
 	tagRow := container.NewHBox(tagRowItems...)
 

@@ -136,16 +136,13 @@ func printTasksHierarchically(tasks []model.Task) {
 			blockTag = fmt.Sprintf(" ⛔[blocked by #%s]", strings.Join(blockingIDs, ", #"))
 		}
 
-		tag := ""
-		if t.Tag != "" {
-			tag += fmt.Sprintf(" (%s)", t.Tag)
-		}
+		meta := ""
 		if t.Assignee != "" {
-			tag += fmt.Sprintf(" @%s", strings.TrimPrefix(t.Assignee, "@"))
+			meta = fmt.Sprintf(" @%s", strings.TrimPrefix(t.Assignee, "@"))
 		}
 
 		fmt.Printf("%s%s%s #%-3s [%-2s] [%-2s] %s%s%s\n",
-			indent, prefix, statusIcon, t.ID, t.Size, t.Tier.ShortLabel(), t.Title, blockTag, tag)
+			indent, prefix, statusIcon, t.ID, t.Size, t.Tier.ShortLabel(), t.Title, blockTag, meta)
 
 		for _, child := range childrenMap[t.ID] {
 			printNode(child, depth+1)

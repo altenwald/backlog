@@ -23,7 +23,6 @@ func TestPrintTasksHierarchically(t *testing.T) {
 			Title:     "Child Task 2",
 			Size:      model.SizeM,
 			Tier:      model.Tier2,
-			Tag:       "ui",
 			Assignee:  "manuel",
 			DependsOn: []string{"1"},
 		},

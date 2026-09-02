@@ -160,11 +160,6 @@ func (dv *TaskDetailView) ShowTask(task model.Task) {
 		dv.badgesRow.Add(depBadge)
 	}
 
-	if task.Tag != "" {
-		tagBadge := MakeBadge(task.Tag, color.NRGBA{R: 90, G: 90, B: 100, A: 255}, color.White)
-		dv.badgesRow.Add(tagBadge)
-	}
-
 	if task.Assignee != "" {
 		assignBadge := MakeBadge(FormatAssignee(task.Assignee), AssigneeBadgeColor(), color.White)
 		dv.badgesRow.Add(assignBadge)

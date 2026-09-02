@@ -372,7 +372,6 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			mcp.WithString("depends_on", mcp.Description("Comma-separated task IDs this task depends on / is blocked by (optional)")),
 			mcp.WithString("size", mcp.Description("Effort size: 'XS', 'S', 'M', 'L', 'XL' (default 'M')")),
 			mcp.WithNumber("tier", mcp.Description("Priority tier: 1 (Blocker) to 5 (Future). Default 3")),
-			mcp.WithString("tag", mcp.Description("Tag or reference label (e.g. 'TODO', 'spec 08-24')")),
 			mcp.WithString("resolution", mcp.Description("Summary of implementation details or resolution (optional)")),
 			mcp.WithString("assignee", mcp.Description("Assignee name/handle (e.g. 'claude', 'manuel')")),
 		),
@@ -390,7 +389,6 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			desc := req.GetString("description", "")
 			parentID := req.GetString("parent_id", "")
 			sizeStr := req.GetString("size", "M")
-			tag := req.GetString("tag", "")
 			resolution := req.GetString("resolution", "")
 			assignee := req.GetString("assignee", "")
 
@@ -427,7 +425,6 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 				DependsOn:   dependsOn,
 				Size:        model.Size(strings.ToUpper(sizeStr)),
 				Tier:        tier,
-				Tag:         tag,
 				Resolution:  resolution,
 				Assignee:    assignee,
 			})
@@ -556,7 +553,6 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			mcp.WithString("depends_on", mcp.Description("New comma-separated dependency task IDs (or 'none'/'clear' to clear dependencies)")),
 			mcp.WithString("size", mcp.Description("New effort size ('XS', 'S', 'M', 'L', 'XL')")),
 			mcp.WithNumber("tier", mcp.Description("New Tier (1..5)")),
-			mcp.WithString("tag", mcp.Description("New tag")),
 			mcp.WithString("resolution", mcp.Description("New resolution / implementation details summary")),
 			mcp.WithString("assignee", mcp.Description("New assignee handle (or empty to unassign)")),
 		),
@@ -598,18 +594,18 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 						}
 					}
 					update.DependsOn = list
-				} else if depStr, ok := rawArgs["depends_on"].(string); ok {
-					depStr = strings.TrimSpace(depStr)
-					if depStr == "none" || depStr == "clear" || depStr == "0" {
+				}
+			}
+			if len(update.DependsOn) == 0 {
+				if depStr := req.GetString("depends_on", ""); depStr != "" {
+					if depStr == "none" || depStr == "clear" {
 						update.DependsOn = []string{}
-					} else if depStr != "" {
-						var list []string
+					} else {
 						for _, part := range strings.Split(depStr, ",") {
 							if s := strings.TrimSpace(part); s != "" {
-								list = append(list, s)
+								update.DependsOn = append(update.DependsOn, s)
 							}
 						}
-						update.DependsOn = list
 					}
 				}
 			}
@@ -618,9 +614,6 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			}
 			if tierVal := req.GetInt("tier", 0); tierVal > 0 {
 				update.Tier = model.Tier(tierVal)
-			}
-			if tagVal := req.GetString("tag", ""); tagVal != "" {
-				update.Tag = tagVal
 			}
 			if resVal := req.GetString("resolution", ""); resVal != "" {
 				update.Resolution = resVal

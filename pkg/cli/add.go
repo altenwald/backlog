@@ -17,7 +17,6 @@ var (
 	addDepends    string
 	addSize       string
 	addTier       int
-	addTag        string
 	addResolution string
 	addAssignee   string
 )
@@ -75,7 +74,6 @@ var addCmd = &cobra.Command{
 			DependsOn:   dependsOn,
 			Size:        size,
 			Tier:        tier,
-			Tag:         addTag,
 			Resolution:  addResolution,
 			Assignee:    addAssignee,
 		})
@@ -104,7 +102,6 @@ func init() {
 	addCmd.Flags().StringVar(&addDepends, "depends", "", "Comma-separated task IDs this task depends on (blocked by)")
 	addCmd.Flags().StringVarP(&addSize, "size", "S", "M", "Effort size (XS, S, M, L, XL)")
 	addCmd.Flags().IntVarP(&addTier, "tier", "t", 3, "Priority Tier (1=Blocker, 2=Important, 3=Visual debt, 4=Internal, 5=Future)")
-	addCmd.Flags().StringVar(&addTag, "tag", "", "Tag or reference label")
 	addCmd.Flags().StringVarP(&addResolution, "resolution", "r", "", "Summary of implementation details or resolution")
 	addCmd.Flags().StringVarP(&addAssignee, "assignee", "a", "", "Assignee handle (e.g. 'claude', 'manuel')")
 	RootCmd.AddCommand(addCmd)

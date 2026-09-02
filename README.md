@@ -1,98 +1,110 @@
 # Backlog 📋
 
-**Backlog** is a visual task and priority manager for developers featuring a **Fyne desktop GUI**, a resident **menu bar icon (System Tray)** displaying real-time `[Project] Open/Total` ratios, **multi-project** support, a fast **CLI**, and a native **MCP (Model Context Protocol)** server.
+**Backlog** is a high-performance visual task and priority manager engineered for developers and AI agents. It features a native **macOS / multiplatform desktop GUI** (powered by Fyne), an interactive **Burn-Up progress chart**, a resident **menu bar icon (System Tray)** with live status metrics, **multi-project** support, task **dependencies & blocking detection**, hierarchical subtask branching, a fast **CLI**, and a native **MCP (Model Context Protocol)** server.
 
 ---
 
 ## Features
 
-* **System Tray / Menu Bar Resident Icon**:
-  * Displays active project and open task ratio at all times: `[Project] 12/15`.
-  * Quick-access context menu with **Top 5 highest priority tasks** (T1 -> T2).
-  * Fast project switcher and direct shortcut to "+ New Task".
-* **Full Desktop GUI (Fyne)**:
-  * **Summary Metrics Bar**: Open/total tasks ratio and breakdown by effort size (`XL`, `L`, `M`, `S`, `XS`).
-  * **Priority Tier Filters**:
-    * `T1 · Blocker` (Red)
-    * `T2 · Important` (Orange)
-    * `T3 · Visual debt` (Teal)
-    * `T4 · Internal` (Purple)
-    * `T5 · Future` (Gray)
-  * Real-time search query filtering.
-  * Hierarchical task tree: break down complex tasks into branched subtasks (`parent_id`).
-  * Single-click task completion with live recalculations.
-* **Multi-Project Support**:
-  * Isolate tasks and metrics across multiple independent projects (*Backend*, *Frontend*, etc.).
-  * Select project via `--project` (`-p`) flag, `BACKLOG_PROJECT` environment variable, or GUI dropdown.
-* **Embedded Daemon with Live Reactivity**:
-  * Central daemon runs on `127.0.0.1:8484`.
-  * Any task mutation from the CLI or MCP updates the desktop UI and System Tray icon in real time.
-* **MCP (Model Context Protocol) Integration**:
-  * Native HTTP SSE endpoint on `http://127.0.0.1:8485/sse`.
-  * Stdio mode for local client execution (`backlog mcp`).
-  * Exposed tools: `list_projects`, `list_tasks`, `get_summary`, `get_top_priorities`, `add_task`, `complete_task`, `update_task`, `delete_task`, `set_active_project`.
+### 📈 Interactive Burn-Up Progress Chart
+* **Chronological Timeline**: Visualizes total scope (blue) and completed tasks (green) over time.
+* **Non-blocking Live Hover Indicator**: Hovering over any milestone smoothly displays the exact date, total scope, completed count, and pending workload (`📅 02 Sep: ● Total Scope: 12 · ● Completed: 8 · ⏳ Pending: 4`).
+* **Direct Point Values**: Key milestones display numeric values directly on the plot.
+* **Empty State Guidance**: Clear visual cues when initializing a new project.
+
+### ⛔ Dependencies, Blocking Detection & Cycles
+* **Task Prerequisites (`depends_on`)**: Declare task dependencies to enforce strict execution order.
+* **Automatic Blocked State**: Tasks remain marked as blocked (`⛔ [blocked by #X]`) until all prerequisite tasks are completed.
+* **Cycle Prevention**: Circular dependencies (e.g. A → B → A) are detected and rejected.
+
+### 🌳 Hierarchical Task Tree & Subtasks
+* **Branching Breakdown (`parent_id`)**: Decompose complex features and epics into manageable subtasks.
+* **Cascade Deletion**: Removing a parent task automatically and cleanly cascades to all its descendants.
+
+### 🖥️ Native Desktop GUI (Fyne)
+* **Master-Detail Layout**:
+  * **Left Pane**: Searchable, filterable task list with hierarchical tree indentation, priority badges, effort sizes, blocking alerts, and assignee pills.
+  * **Right Pane (Split View)**: Interactive Burn-Up chart on top, comprehensive Markdown detail inspector on the bottom.
+* **Markdown Renderer**: Formatted headers, code blocks, lists, quotes, and links for descriptions and resolution notes.
+* **Priority Tier Filters**:
+  * `T1 · Blocker` (Red)
+  * `T2 · Important` (Orange)
+  * `T3 · Visual debt` (Teal)
+  * `T4 · Internal` (Purple)
+  * `T5 · Future` (Gray)
+* **Effort Size Chips**: Filter by `XL`, `L`, `M`, `S`, `XS`.
+* **Keyboard Navigation**: Use `↑` / `↓` arrow keys to quickly navigate between tasks.
+
+### 🪟 Menu Bar / System Tray Resident App
+* **Always-Visible Metric**: Displays the active project and pending ratio at all times (`[Project] 4/12`).
+* **Instant Project Switcher**: Switch active projects directly from the menu bar.
+* **Quick Task Creation**: Instant shortcut to launch the "New Task" dialog.
+
+### 🤖 AI Agent & MCP Integration
+* **Model Context Protocol (MCP)**:
+  * SSE endpoint on `http://127.0.0.1:8485/sse` and stdio transport via `backlog mcp`.
+  * Provides tools for autonomous agents to inspect tasks, manage priorities, track dependencies, assign work, and log implementation resolutions.
+  * Built-in workflow resource (`backlog://workflow`).
 
 ---
 
 ## Installation & Build
 
-```bash
-# Build the binary
-go build -o bin/backlog ./cmd/backlog
+### Requirements
+* Go 1.22+
+* macOS 11.0+ (Universal binary: Apple Silicon arm64 + Intel amd64) or Linux/Windows
 
-# Or install to your $GOPATH/bin
-go install ./cmd/backlog
+### Build Commands
+```bash
+# Build universal macOS .app bundle
+make bundle
+
+# Build standalone CLI binary
+make build
+
+# Run all test suites
+make test
 ```
+
+The universal bundle will be available at `bin/Backlog.app`.
 
 ---
 
-## Usage
-
-### 1. Start Desktop App & Background Server
-```bash
-backlog
-# or explicitly:
-backlog start --port 8484
-```
-* The app docks into your macOS/Linux/Windows System Tray with active project stats (`[Project] 12/15`).
-* Closing the main window keeps the application resident in the menu bar.
-
-### 2. CLI Commands
+## CLI Usage
 
 ```bash
-# Set default project for current shell session (optional)
+# Set default project for current session (optional)
 export BACKLOG_PROJECT=my-project
 
-# List open tasks (with optional filters)
+# List open tasks (hierarchical tree display)
 backlog list
 backlog list --tier 1
-backlog list -P 1
-backlog list -p frontend --tier 2
+backlog list --done=all
+backlog list --blocked
 
-# Display metrics summary
-backlog summary
+# Add a root task
+backlog add --title "Migrate authentication to OAuth2" --tier 1 --size L
 
-# Add a new task (or subtask)
-backlog add --title "Renew SSL certificates" --tier 1 --size M
-backlog add --title "Configure Let's Encrypt bot" --parent 1 --size S
+# Add a dependent subtask
+backlog add --title "Implement refresh token rotation" --parent 1 --depends 1 --size M --assignee manuel
 
-# Complete or reopen tasks
-backlog done 1
-backlog undone 1
+# Assign or claim tasks
+backlog assign 2 claude
+
+# Mark task as completed with resolution notes
+backlog done 2 -r "Implemented PKCE with automatic refresh rotation in commit abc1234"
 
 # Project management
 backlog projects
-backlog project use conta
-backlog project new mobile-app --name "Mobile App"
+backlog project use web-app
+backlog project new backend --name "Backend Service"
 ```
 
 ---
 
-### 3. MCP (Model Context Protocol) Setup
+## MCP Server Configuration
 
-#### A. HTTP SSE Connection (Recommended when `backlog` is running)
-In your MCP client configuration:
-
+### HTTP SSE Connection (Recommended when Backlog desktop is running)
 ```json
 {
   "mcpServers": {
@@ -103,7 +115,7 @@ In your MCP client configuration:
 }
 ```
 
-#### B. Stdio Connection (On-demand execution)
+### Stdio Connection (Standalone execution)
 ```json
 {
   "mcpServers": {

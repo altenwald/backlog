@@ -88,7 +88,6 @@ type Task struct {
 	Done         bool       `json:"done"`
 	Assignee     string     `json:"assignee,omitempty"`   // e.g. "claude", "antigravity", "manuel"
 	Resolution   string     `json:"resolution,omitempty"` // Summary of implementation details and resolution
-	Tag          string     `json:"tag,omitempty"`
 	InsertedAt   time.Time  `json:"inserted_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	TerminatedAt *time.Time `json:"terminated_at,omitempty"`

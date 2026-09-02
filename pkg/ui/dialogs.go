@@ -45,9 +45,6 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 	}, nil)
 	tierSelect.SetSelected("3 · Visual debt (T3)")
 
-	tagEntry := widget.NewEntry()
-	tagEntry.SetPlaceHolder("e.g. TODO, spec 08-24...")
-
 	resEntry := widget.NewMultiLineEntry()
 	resEntry.Wrapping = fyne.TextWrapWord
 	resEntry.SetMinRowsVisible(3)
@@ -61,7 +58,6 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 		widget.NewFormItem("Assignee", assigneeEntry),
 		widget.NewFormItem("Effort Size", sizeSelect),
 		widget.NewFormItem("Priority / Tier", tierSelect),
-		widget.NewFormItem("Tag / Reference", tagEntry),
 		widget.NewFormItem("Resolution", resEntry),
 	}
 
@@ -92,7 +88,6 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 			Assignee:    strings.TrimSpace(assigneeEntry.Text),
 			Size:        model.Size(sizeSelect.Selected),
 			Tier:        model.Tier(tierNum),
-			Tag:         strings.TrimSpace(tagEntry.Text),
 			Resolution:  strings.TrimSpace(resEntry.Text),
 		}
 
@@ -143,9 +138,6 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 	tierSelect := widget.NewSelect(tiers, nil)
 	tierSelect.SetSelected(tiers[tierIndex])
 
-	tagEntry := widget.NewEntry()
-	tagEntry.SetText(task.Tag)
-
 	resEntry := widget.NewMultiLineEntry()
 	resEntry.Wrapping = fyne.TextWrapWord
 	resEntry.SetMinRowsVisible(4)
@@ -160,7 +152,6 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 		widget.NewFormItem("Assignee", assigneeEntry),
 		widget.NewFormItem("Effort Size", sizeSelect),
 		widget.NewFormItem("Priority / Tier", tierSelect),
-		widget.NewFormItem("Tag / Reference", tagEntry),
 		widget.NewFormItem("Resolution / Details", resEntry),
 	}
 
@@ -191,7 +182,6 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 		updated.Assignee = strings.TrimSpace(assigneeEntry.Text)
 		updated.Size = model.Size(sizeSelect.Selected)
 		updated.Tier = model.Tier(tierNum)
-		updated.Tag = strings.TrimSpace(tagEntry.Text)
 		updated.Resolution = strings.TrimSpace(resEntry.Text)
 
 		if onSave != nil {
@@ -274,7 +264,7 @@ func ShowAboutDialog(parent fyne.Window) {
 	)
 
 	copyrightLabel := widget.NewLabelWithStyle(
-		"Copyright © 2026 Altenwald Solutions, S.L.U.\nAuthor: Manuel Rubio",
+		"Copyright © 2026 Altenwald\nAuthor: Manuel Rubio",
 		fyne.TextAlignCenter,
 		fyne.TextStyle{},
 	)
@@ -297,7 +287,7 @@ func ShowAboutDialog(parent fyne.Window) {
 	licenseEntry.SetMinRowsVisible(6)
 	licenseEntry.SetText(`MIT License
 
-Copyright (c) 2026 Altenwald Solutions, S.L.U. / Manuel Rubio
+Copyright (c) 2026 Altenwald / Manuel Rubio
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

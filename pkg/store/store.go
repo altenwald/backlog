@@ -362,10 +362,9 @@ func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.
 		if searchLower != "" {
 			inTitle := strings.Contains(strings.ToLower(task.Title), searchLower)
 			inDesc := strings.Contains(strings.ToLower(task.Description), searchLower)
-			inTag := strings.Contains(strings.ToLower(task.Tag), searchLower)
 			inAssignee := strings.Contains(strings.ToLower(task.Assignee), searchLower)
 			inID := task.ID == searchLower || task.ParentID == searchLower
-			if !inTitle && !inDesc && !inTag && !inAssignee && !inID {
+			if !inTitle && !inDesc && !inAssignee && !inID {
 				continue
 			}
 		}
@@ -711,7 +710,6 @@ func (s *Store) UpdateTask(projectSlug string, task model.Task) (*model.Task, er
 			if task.Assignee != "" {
 				p.Tasks[i].Assignee = task.Assignee
 			}
-			p.Tasks[i].Tag = task.Tag
 			p.Tasks[i].UpdatedAt = now
 			p.UpdatedAt = now
 

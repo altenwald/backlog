@@ -353,14 +353,12 @@ func TestTaskFilteringAndAssignment(t *testing.T) {
 		Title:    "Frontend Refactor",
 		Size:     model.SizeM,
 		Tier:     model.Tier3,
-		Tag:      "ui",
 		Assignee: "alice",
 	})
 	t2, _ := st.AddTask(projSlug, model.Task{
-		Title:    "Backend API optimization",
+		Title:    "Backend API performance optimization",
 		Size:     model.SizeXL,
 		Tier:     model.Tier1,
-		Tag:      "performance",
 		Assignee: "bob",
 	})
 	t3, _ := st.AddTask(projSlug, model.Task{
