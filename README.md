@@ -96,9 +96,11 @@ backlog done 2 -r "Implemented PKCE with automatic refresh rotation in commit ab
 
 # Project management
 backlog projects
-backlog project use web-app
 backlog project new backend --name "Backend Service"
 ```
+
+> **Note:** All task commands require a project. Set it via `--project <slug>` or the `BACKLOG_PROJECT` environment variable.
+> The active project switcher (tray menu) is only available in the desktop GUI.
 
 ---
 
