@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/altenwald/backlog/pkg/model"
@@ -126,5 +127,38 @@ func TestCLICommandsWithStore(t *testing.T) {
 	err = listCmd.RunE(listCmd, []string{})
 	if err != nil {
 		t.Fatalf("listCmd with blocked failed: %v", err)
+	}
+
+	// 5. Test missing project error
+	flagProject = ""
+	err = listCmd.RunE(listCmd, []string{})
+	if err == nil || !strings.Contains(err.Error(), "must specify a project") {
+		t.Fatalf("expected error about specifying a project, got: %v", err)
+	}
+	err = summaryCmd.RunE(summaryCmd, []string{})
+	if err == nil || !strings.Contains(err.Error(), "must specify a project") {
+		t.Fatalf("expected error about specifying a project, got: %v", err)
+	}
+}
+
+func TestResolveProject(t *testing.T) {
+	// Branch 1: CLI flag takes priority
+	got := resolveProject("my-proj")
+	if got != "my-proj" {
+		t.Fatalf("expected my-proj, got %s", got)
+	}
+
+	// Branch 2: BACKLOG_PROJECT env var used when flag is empty
+	t.Setenv("BACKLOG_PROJECT", "env-proj")
+	got = resolveProject("")
+	if got != "env-proj" {
+		t.Fatalf("expected env-proj from env var, got %s", got)
+	}
+
+	// Branch 3: Both empty -> returns ""
+	t.Setenv("BACKLOG_PROJECT", "")
+	got = resolveProject("")
+	if got != "" {
+		t.Fatalf("expected empty string, got %s", got)
 	}
 }

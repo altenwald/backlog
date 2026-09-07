@@ -57,15 +57,12 @@ var listCmd = &cobra.Command{
 		var proj string
 		var err error
 
+		proj = resolveProject(flagProject)
+		if proj == "" {
+			return fmt.Errorf("must specify a project via --project (-p) or BACKLOG_PROJECT environment variable")
+		}
+
 		if c.IsServerRunning() {
-			proj = resolveProject(flagProject)
-			if proj == "" {
-				active, err := c.GetActiveProject()
-				if err != nil {
-					return err
-				}
-				proj = active.Slug
-			}
 			tasks, err = c.ListTasks(proj, filter)
 			if err != nil {
 				return err
@@ -75,10 +72,6 @@ var listCmd = &cobra.Command{
 			st, err := store.NewStore(flagDataDir)
 			if err != nil {
 				return err
-			}
-			proj = resolveProject(flagProject)
-			if proj == "" {
-				proj = st.GetActiveProjectSlug()
 			}
 			tasks, err = st.ListTasks(proj, filter)
 			if err != nil {

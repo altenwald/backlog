@@ -71,11 +71,10 @@ func (s *Server) Start() error {
 	// Health & info check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, http.StatusOK, map[string]any{
-			"status":         "ok",
-			"active_project": s.store.GetActiveProjectSlug(),
-			"api_port":       s.port,
-			"mcp_sse_port":   s.port + 1,
-			"mcp_sse_url":    fmt.Sprintf("http://127.0.0.1:%d/sse", s.port+1),
+			"status":       "ok",
+			"api_port":     s.port,
+			"mcp_sse_port": s.port + 1,
+			"mcp_sse_url":  fmt.Sprintf("http://127.0.0.1:%d/sse", s.port+1),
 		})
 	})
 

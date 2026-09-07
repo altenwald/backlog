@@ -18,10 +18,6 @@ var mcpCmd = &cobra.Command{
 			return fmt.Errorf("⚠️  Backlog server daemon is not running on %s. Please start Backlog first", flagAPIURL)
 		}
 
-		if proj := resolveProject(flagProject); proj != "" {
-			_ = c.SetActiveProject(proj)
-		}
-
 		s := server.NewMCPServerWithBackend(server.NewClientBackend(c))
 		return mcpServer.ServeStdio(s)
 	},

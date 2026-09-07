@@ -24,11 +24,7 @@ var doneCmd = &cobra.Command{
 
 		proj := resolveProject(flagProject)
 		if proj == "" {
-			active, err := c.GetActiveProject()
-			if err != nil {
-				return err
-			}
-			proj = active.Slug
+			return fmt.Errorf("must specify a project via --project (-p) or BACKLOG_PROJECT environment variable")
 		}
 
 		task, err := c.CompleteTask(proj, taskID, true, flagDoneResolution)
@@ -60,11 +56,7 @@ var undoneCmd = &cobra.Command{
 
 		proj := resolveProject(flagProject)
 		if proj == "" {
-			active, err := c.GetActiveProject()
-			if err != nil {
-				return err
-			}
-			proj = active.Slug
+			return fmt.Errorf("must specify a project via --project (-p) or BACKLOG_PROJECT environment variable")
 		}
 
 		task, err := c.CompleteTask(proj, taskID, false)

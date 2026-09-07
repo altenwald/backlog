@@ -51,16 +51,16 @@ func TestAPIHandlerFullEndpoints(t *testing.T) {
 		t.Fatalf("POST /api/projects failed: %v, status %d", err, resp.StatusCode)
 	}
 
-	// 3. POST /api/projects/active & GET /api/projects/active
+	// 3. Verify /api/projects/active is removed
 	bodyActive, _ := json.Marshal(map[string]string{"slug": "api-proj"})
 	resp, err = client.Post(ts.URL+"/api/projects/active", "application/json", bytes.NewReader(bodyActive))
-	if err != nil || resp.StatusCode != http.StatusOK {
-		t.Fatalf("POST /api/projects/active failed: %v", err)
+	if err != nil || (resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusMethodNotAllowed) {
+		t.Fatalf("expected POST /api/projects/active to fail with 404/405, got %v (status %d)", err, resp.StatusCode)
 	}
 
 	resp, err = client.Get(ts.URL + "/api/projects/active")
-	if err != nil || resp.StatusCode != http.StatusOK {
-		t.Fatalf("GET /api/projects/active failed: %v", err)
+	if err != nil || resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected GET /api/projects/active to be 404, got %v (status %d)", err, resp.StatusCode)
 	}
 
 	// 4. GET /api/projects

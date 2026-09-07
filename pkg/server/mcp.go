@@ -17,16 +17,21 @@ import (
 const BacklogInstructions = `You are connected to Backlog, an issue and task tracking management system for software engineering.
 Follow this standard protocol when interacting with Backlog:
 
+0. MULTI-PROJECT REQUIREMENT:
+   - Backlog manages tasks strictly scoped by project.
+   - The 'project' parameter is MANDATORY for all task and summary operations (e.g. 'list_tasks', 'add_task', 'get_summary', 'assign_task', 'complete_task', 'update_task', 'delete_task').
+   - Call 'list_projects()' to discover existing project slugs in the workspace.
+
 1. INITIAL ON-CONNECT HANDSHAKE:
-   - As soon as you connect to Backlog or start a conversation, immediately call 'list_tasks(assignee="<your-handle>", done=false)' (where <your-handle> is your agent handle like 'claude', 'antigravity', etc.) to inspect any pending tasks currently assigned to you by the user or team.
+   - As soon as you connect to Backlog or start a conversation, determine the target project (via 'list_projects()' or user instruction), then call 'list_tasks(project="<project-slug>", assignee="<your-handle>", done=false)' (where <your-handle> is your agent handle like 'claude', 'antigravity', etc.) to inspect any pending tasks currently assigned to you by the user or team.
    - If you have assigned tasks, report them to the user and prioritize working on them before picking up unassigned work.
 
 2. PERIODIC ASSIGNMENT CHECKING:
-   - While working in the session, between tasks or when completing a milestone, periodically check 'list_tasks(assignee="<your-handle>", done=false)' to discover if the user or another agent has assigned you new tasks in the GUI.
+   - While working in the session, between tasks or when completing a milestone, periodically check 'list_tasks(project="<project-slug>", assignee="<your-handle>", done=false)' to discover if the user or another agent has assigned you new tasks in the GUI.
 
 3. WORKFLOW LIFECYCLE & STRICT TDD REQUIREMENT:
-   - Discover: If you have no assigned tasks, use 'get_top_priorities' or 'list_tasks(assignee="unassigned", done=false)' to find pending work.
-   - Claim & Assign: BEFORE starting work on a task, call 'assign_task(task_id="<ID>", assignee="<your-handle>")'. This updates the Backlog GUI in real time and signals that the task is currently in progress.
+   - Discover: If you have no assigned tasks, use 'get_top_priorities(project="<project-slug>")' or 'list_tasks(project="<project-slug>", assignee="unassigned", done=false)' to find pending work.
+   - Claim & Assign: BEFORE starting work on a task, call 'assign_task(project="<project-slug>", task_id="<ID>", assignee="<your-handle>")'. This updates the Backlog GUI in real time and signals that the task is currently in progress.
    - Strict TDD (Test-Driven Development):
      * Always develop following a strict TDD methodology: write or update tests FIRST to specify the expected behavior.
      * Implement the code changes to satisfy the tests.
@@ -35,7 +40,7 @@ Follow this standard protocol when interacting with Backlog:
    - Git Commit Requirement:
      * The work for every task MUST culminate in a Git commit once tests pass and coverage is verified.
    - Complete with Commit Hash:
-     * Once committed, call 'complete_task(task_id="<ID>", done=true, resolution="...")'.
+     * Once committed, call 'complete_task(project="<project-slug>", task_id="<ID>", done=true, resolution="...")'.
      * The 'resolution' field MUST explicitly include:
        1) The Git commit hash created (e.g. 'Commit: abc1234').
        2) Summary of implementation details and architectural decisions.
@@ -93,22 +98,22 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 		mcp.NewPrompt(
 			"pick_next_task",
 			mcp.WithPromptDescription("Guide the AI to find the highest-priority pending task, assign it to itself, and plan implementation."),
+			mcp.WithArgument("project", mcp.ArgumentDescription("Project slug (required)"), mcp.RequiredArgument()),
 			mcp.WithArgument("agent", mcp.ArgumentDescription("Your agent handle (e.g. 'claude', 'antigravity')"), mcp.RequiredArgument()),
-			mcp.WithArgument("project", mcp.ArgumentDescription("Project slug (optional, defaults to active)")),
 		),
 		func(ctx context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-			agent := req.Params.Arguments["agent"]
-			project := req.Params.Arguments["project"]
+			project := strings.TrimSpace(req.Params.Arguments["project"])
 			if project == "" {
-				project = be.GetActiveProjectSlug()
+				return nil, fmt.Errorf("argument 'project' is required")
 			}
+			agent := strings.TrimSpace(req.Params.Arguments["agent"])
 
 			promptText := fmt.Sprintf(`Please perform the following workflow in Backlog:
-1. Check for tasks assigned to you: call 'list_tasks(assignee="%s", done=false, project="%s")'.
+1. Check for tasks assigned to you: call 'list_tasks(project="%s", assignee="%s", done=false)'.
 2. If you already have assigned open tasks, pick the highest priority one and proceed.
-3. If no tasks are assigned to you, call 'get_top_priorities(project="%s", limit=5)' or 'list_tasks(assignee="unassigned", done=false, project="%s")'.
-4. Claim the task: call 'assign_task(task_id="<ID>", assignee="%s", project="%s")' so it shows assigned to you in the Backlog GUI.
-5. Plan implementation following TDD (write tests first, ensure coverage does not decrease).`, agent, project, project, project, agent, project)
+3. If no tasks are assigned to you, call 'get_top_priorities(project="%s", limit=5)' or 'list_tasks(project="%s", assignee="unassigned", done=false)'.
+4. Claim the task: call 'assign_task(project="%s", task_id="<ID>", assignee="%s")' so it shows assigned to you in the Backlog GUI.
+5. Plan implementation following TDD (write tests first, ensure coverage does not decrease).`, project, agent, project, project, project, agent)
 
 			return mcp.NewGetPromptResult(
 				"Pick Next Task Workflow",
@@ -124,20 +129,25 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 		mcp.NewPrompt(
 			"complete_task_workflow",
 			mcp.WithPromptDescription("Guide the AI to mark a task as completed with structured resolution details including Git commit hash and test coverage."),
+			mcp.WithArgument("project", mcp.ArgumentDescription("Project slug (required)"), mcp.RequiredArgument()),
 			mcp.WithArgument("task_id", mcp.ArgumentDescription("ID of the task completed"), mcp.RequiredArgument()),
 			mcp.WithArgument("commit_hash", mcp.ArgumentDescription("Git commit hash created for this task"), mcp.RequiredArgument()),
 			mcp.WithArgument("resolution", mcp.ArgumentDescription("Markdown summary of implementation details and test coverage"), mcp.RequiredArgument()),
 		),
 		func(ctx context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-			taskID := req.Params.Arguments["task_id"]
-			commitHash := req.Params.Arguments["commit_hash"]
-			res := req.Params.Arguments["resolution"]
+			project := strings.TrimSpace(req.Params.Arguments["project"])
+			if project == "" {
+				return nil, fmt.Errorf("argument 'project' is required")
+			}
+			taskID := strings.TrimSpace(req.Params.Arguments["task_id"])
+			commitHash := strings.TrimSpace(req.Params.Arguments["commit_hash"])
+			res := strings.TrimSpace(req.Params.Arguments["resolution"])
 
 			promptText := fmt.Sprintf(`Follow the completion protocol:
 1. Ensure all tests pass and overall test coverage has not decreased.
 2. Verify commit '%s' exists in git history.
-3. Call 'complete_task(task_id="%s", done=true, resolution="Commit: %s\n\n%s")'.
-4. Summarize the resolution to the user with the commit hash and test results.`, commitHash, taskID, commitHash, res)
+3. Call 'complete_task(project="%s", task_id="%s", done=true, resolution="Commit: %s\n\n%s")'.
+4. Summarize the resolution to the user with the commit hash and test results.`, commitHash, project, taskID, commitHash, res)
 
 			return mcp.NewGetPromptResult(
 				"Complete Task Workflow",
@@ -152,7 +162,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 	s.AddTool(
 		mcp.NewTool(
 			"list_projects",
-			mcp.WithDescription("List all registered projects in Backlog with metrics, open tasks, and active status."),
+			mcp.WithDescription("List all registered projects in Backlog with metrics and open tasks."),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			items, err := be.ListProjects()
@@ -162,41 +172,6 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 
 			data, _ := json.MarshalIndent(items, "", "  ")
 			return mcp.NewToolResultText(string(data)), nil
-		},
-	)
-
-	// Tool: get_active_project
-	s.AddTool(
-		mcp.NewTool(
-			"get_active_project",
-			mcp.WithDescription("Get the currently active project in the GUI and server."),
-		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			resp, err := be.GetActiveProject()
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			data, _ := json.MarshalIndent(resp, "", "  ")
-			return mcp.NewToolResultText(string(data)), nil
-		},
-	)
-
-	// Tool: set_active_project
-	s.AddTool(
-		mcp.NewTool(
-			"set_active_project",
-			mcp.WithDescription("Switch the active project focused in the GUI and System Tray."),
-			mcp.WithString("project", mcp.Description("Project slug to activate (e.g. 'my-project')"), mcp.Required()),
-		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			project := req.GetString("project", "")
-			if project == "" {
-				return mcp.NewToolResultError("parameter 'project' is required"), nil
-			}
-			if err := be.SetActiveProject(project); err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			return mcp.NewToolResultText(fmt.Sprintf("Active project switched to '%s'", project)), nil
 		},
 	)
 
@@ -251,7 +226,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 		mcp.NewTool(
 			"list_tasks",
 			mcp.WithDescription("List tasks in a project with optional filters by Tier (1 to 5), parent task ID, Status (open/completed), Size, or search query."),
-			mcp.WithString("project", mcp.Description("Project slug (optional; defaults to active project)")),
+			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
 			mcp.WithNumber("tier", mcp.Description("Filter by priority Tier: 1=Blocker, 2=Important, 3=Visual debt, 4=Internal, 5=Future")),
 			mcp.WithString("parent_id", mcp.Description("Filter by parent task ID (optional; pass task ID to list subtasks)")),
 			mcp.WithString("depends_on", mcp.Description("Filter tasks that depend on this specific task ID (optional)")),
@@ -262,9 +237,9 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			mcp.WithString("assignee", mcp.Description("Filter by assignee (e.g. 'claude', 'manuel', 'unassigned')")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			project := req.GetString("project", "")
+			project := strings.TrimSpace(req.GetString("project", ""))
 			if project == "" {
-				project = be.GetActiveProjectSlug()
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
 			}
 
 			filter := model.TaskFilter{}
@@ -313,12 +288,12 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 		mcp.NewTool(
 			"get_summary",
 			mcp.WithDescription("Get metric summary, open/total tasks, and breakdown by size and tier for a project."),
-			mcp.WithString("project", mcp.Description("Project slug (optional; defaults to active project)")),
+			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			project := req.GetString("project", "")
+			project := strings.TrimSpace(req.GetString("project", ""))
 			if project == "" {
-				project = be.GetActiveProjectSlug()
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
 			}
 
 			sum, err := be.GetSummary(project)
@@ -336,13 +311,13 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 		mcp.NewTool(
 			"get_top_priorities",
 			mcp.WithDescription("Get the highest priority pending tasks (T1 -> T2) for a project."),
-			mcp.WithString("project", mcp.Description("Project slug (optional)")),
+			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
 			mcp.WithNumber("limit", mcp.Description("Number of tasks to return (default 5)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			project := req.GetString("project", "")
+			project := strings.TrimSpace(req.GetString("project", ""))
 			if project == "" {
-				project = be.GetActiveProjectSlug()
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
 			}
 
 			limit := req.GetInt("limit", 5)
@@ -365,9 +340,9 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 		mcp.NewTool(
 			"add_task",
 			mcp.WithDescription("Add a new task to the project backlog."),
+			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
 			mcp.WithString("title", mcp.Description("Concise title of the task"), mcp.Required()),
 			mcp.WithString("description", mcp.Description("Detailed description or context")),
-			mcp.WithString("project", mcp.Description("Project slug (optional; defaults to active project)")),
 			mcp.WithString("parent_id", mcp.Description("Parent task ID if this task is a subtask/branch (optional)")),
 			mcp.WithString("depends_on", mcp.Description("Comma-separated task IDs this task depends on / is blocked by (optional)")),
 			mcp.WithString("size", mcp.Description("Effort size: 'XS', 'S', 'M', 'L', 'XL' (default 'M')")),
@@ -376,14 +351,14 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 			mcp.WithString("assignee", mcp.Description("Assignee name/handle (e.g. 'claude', 'manuel')")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			project := strings.TrimSpace(req.GetString("project", ""))
+			if project == "" {
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
+			}
+
 			title := strings.TrimSpace(req.GetString("title", ""))
 			if title == "" {
 				return mcp.NewToolResultError("parameter 'title' is required"), nil
-			}
-
-			project := req.GetString("project", "")
-			if project == "" {
-				project = be.GetActiveProjectSlug()
 			}
 
 			desc := req.GetString("description", "")
@@ -443,9 +418,9 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 		mcp.NewTool(
 			"assign_task",
 			mcp.WithDescription("Assign a task to an agent (e.g. 'claude', 'antigravity') or person, or unassign (empty string). Call this before starting work on a task."),
+			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
 			mcp.WithString("task_id", mcp.Description("Numeric ID of the task"), mcp.Required()),
 			mcp.WithString("assignee", mcp.Description("Agent or user handle to assign to (e.g. 'claude', 'manuel'). Pass empty string to unassign."), mcp.Required()),
-			mcp.WithString("project", mcp.Description("Project slug (optional)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			taskID := req.GetString("task_id", "")
@@ -461,11 +436,12 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 				return mcp.NewToolResultError("parameter 'task_id' is required"), nil
 			}
 
-			assignee := req.GetString("assignee", "")
-			project := req.GetString("project", "")
+			project := strings.TrimSpace(req.GetString("project", ""))
 			if project == "" {
-				project = be.GetActiveProjectSlug()
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
 			}
+
+			assignee := req.GetString("assignee", "")
 
 			task, err := be.AssignTask(project, taskID, assignee)
 			if err != nil {
@@ -484,8 +460,8 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 		mcp.NewTool(
 			"complete_task",
 			mcp.WithDescription("Mark a task as completed. WORKFLOW REQUIREMENT: Develop following strict TDD with high test coverage (zero coverage regression). Work must culminate in a Git commit. The 'resolution' argument MUST include the commit hash created (e.g. 'Commit: abc1234') along with implementation details and test verification summary."),
+			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
 			mcp.WithString("task_id", mcp.Description("Numeric ID of the task"), mcp.Required()),
-			mcp.WithString("project", mcp.Description("Project slug (optional)")),
 			mcp.WithBoolean("done", mcp.Description("Completed status: true (default) or false")),
 			mcp.WithString("resolution", mcp.Description("Summary of implementation details, files changed, test verification, and MUST include the Git commit hash (e.g. 'Commit: a1b2c3d')")),
 			mcp.WithString("assignee", mcp.Description("Agent or user handle that resolved the task (optional)")),
@@ -504,9 +480,9 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 				return mcp.NewToolResultError("parameter 'task_id' is required"), nil
 			}
 
-			project := req.GetString("project", "")
+			project := strings.TrimSpace(req.GetString("project", ""))
 			if project == "" {
-				project = be.GetActiveProjectSlug()
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
 			}
 
 			done := true
@@ -545,8 +521,8 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 		mcp.NewTool(
 			"update_task",
 			mcp.WithDescription("Update fields of an existing task."),
+			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
 			mcp.WithString("task_id", mcp.Description("ID of task to update"), mcp.Required()),
-			mcp.WithString("project", mcp.Description("Project slug")),
 			mcp.WithString("title", mcp.Description("New title")),
 			mcp.WithString("description", mcp.Description("New description")),
 			mcp.WithString("parent_id", mcp.Description("New parent task ID (or 'none'/'0' to detach/unparent)")),
@@ -570,9 +546,9 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 				return mcp.NewToolResultError("parameter 'task_id' is required"), nil
 			}
 
-			project := req.GetString("project", "")
+			project := strings.TrimSpace(req.GetString("project", ""))
 			if project == "" {
-				project = be.GetActiveProjectSlug()
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
 			}
 
 			update := model.Task{ID: taskID}
@@ -636,8 +612,8 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 		mcp.NewTool(
 			"delete_task",
 			mcp.WithDescription("Permanently delete a task from the backlog."),
+			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
 			mcp.WithString("task_id", mcp.Description("ID of task to delete"), mcp.Required()),
-			mcp.WithString("project", mcp.Description("Project slug")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			taskID := req.GetString("task_id", "")
@@ -653,9 +629,9 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 				return mcp.NewToolResultError("parameter 'task_id' is required"), nil
 			}
 
-			project := req.GetString("project", "")
+			project := strings.TrimSpace(req.GetString("project", ""))
 			if project == "" {
-				project = be.GetActiveProjectSlug()
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
 			}
 
 			if err := be.DeleteTask(project, taskID); err != nil {

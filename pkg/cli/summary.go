@@ -18,15 +18,12 @@ var summaryCmd = &cobra.Command{
 		var sum *model.Summary
 		var err error
 
+		proj := resolveProject(flagProject)
+		if proj == "" {
+			return fmt.Errorf("must specify a project via --project (-p) or BACKLOG_PROJECT environment variable")
+		}
+
 		if c.IsServerRunning() {
-			proj := resolveProject(flagProject)
-			if proj == "" {
-				active, err := c.GetActiveProject()
-				if err != nil {
-					return err
-				}
-				proj = active.Slug
-			}
 			sum, err = c.GetSummary(proj)
 			if err != nil {
 				return err
@@ -35,10 +32,6 @@ var summaryCmd = &cobra.Command{
 			st, err := store.NewStore(flagDataDir)
 			if err != nil {
 				return err
-			}
-			proj := resolveProject(flagProject)
-			if proj == "" {
-				proj = st.GetActiveProjectSlug()
 			}
 			sum, err = st.GetSummary(proj)
 			if err != nil {

@@ -22,15 +22,12 @@ func NewAPIHandler(st *store.Store) *APIHandler {
 func (h *APIHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, http.StatusOK, map[string]any{
-			"status":         "ok",
-			"active_project": h.store.GetActiveProjectSlug(),
+			"status": "ok",
 		})
 	})
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/projects", h.listProjects)
 		r.Post("/projects", h.createProject)
-		r.Get("/projects/active", h.getActiveProject)
-		r.Post("/projects/active", h.setActiveProject)
 
 		r.Route("/projects/{slug}", func(r chi.Router) {
 			r.Get("/", h.getProject)
@@ -60,13 +57,11 @@ func errorResponse(w http.ResponseWriter, status int, message string) {
 
 func (h *APIHandler) listProjects(w http.ResponseWriter, r *http.Request) {
 	projects := h.store.ListProjects()
-	active := h.store.GetActiveProjectSlug()
 
 	type ProjectResp struct {
 		Slug        string         `json:"slug"`
 		Name        string         `json:"name"`
 		Description string         `json:"description"`
-		Active      bool           `json:"active"`
 		Summary     *model.Summary `json:"summary"`
 	}
 
@@ -77,7 +72,6 @@ func (h *APIHandler) listProjects(w http.ResponseWriter, r *http.Request) {
 			Slug:        p.Slug,
 			Name:        p.Name,
 			Description: p.Description,
-			Active:      p.Slug == active,
 			Summary:     sum,
 		})
 	}
@@ -101,37 +95,6 @@ func (h *APIHandler) createProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusCreated, p)
-}
-
-func (h *APIHandler) getActiveProject(w http.ResponseWriter, r *http.Request) {
-	active := h.store.GetActiveProjectSlug()
-	p, err := h.store.GetProject(active)
-	if err != nil {
-		errorResponse(w, http.StatusNotFound, err.Error())
-		return
-	}
-	sum, _ := h.store.GetSummary(active)
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"slug":        p.Slug,
-		"name":        p.Name,
-		"description": p.Description,
-		"summary":     sum,
-	})
-}
-
-func (h *APIHandler) setActiveProject(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Slug string `json:"slug"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		errorResponse(w, http.StatusBadRequest, "invalid json body")
-		return
-	}
-	if err := h.store.SetActiveProject(body.Slug); err != nil {
-		errorResponse(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]string{"message": "active project updated", "active_project": body.Slug})
 }
 
 func (h *APIHandler) getProject(w http.ResponseWriter, r *http.Request) {

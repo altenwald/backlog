@@ -1,12 +1,15 @@
 package server_test
 
 import (
+	"net/http/httptest"
 	"os"
 	"testing"
 
+	"github.com/altenwald/backlog/pkg/client"
 	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/server"
 	"github.com/altenwald/backlog/pkg/store"
+	"github.com/go-chi/chi/v5"
 )
 
 func TestStoreBackend(t *testing.T) {
@@ -29,20 +32,7 @@ func TestStoreBackend(t *testing.T) {
 		t.Fatalf("CreateProject failed: %v", err)
 	}
 
-	// 2. Set active and get active
-	err = be.SetActiveProject("backend-proj")
-	if err != nil {
-		t.Fatalf("SetActiveProject failed: %v", err)
-	}
-	if be.GetActiveProjectSlug() != "backend-proj" {
-		t.Fatalf("expected slug backend-proj, got %s", be.GetActiveProjectSlug())
-	}
-	active, err := be.GetActiveProject()
-	if err != nil || active["active_project"] != "backend-proj" {
-		t.Fatalf("expected active backend-proj, got %+v", active)
-	}
-
-	// 3. ListProjects and GetProject
+	// 2. ListProjects and GetProject
 	projs, err := be.ListProjects()
 	if err != nil || len(projs) != 1 {
 		t.Fatalf("expected 1 project, got %d", len(projs))
@@ -103,5 +93,105 @@ func TestStoreBackend(t *testing.T) {
 	err = be.DeleteProject("backend-proj")
 	if err != nil {
 		t.Fatalf("DeleteProject failed: %v", err)
+	}
+}
+
+// TestClientBackend exercises all clientBackend methods, which proxy calls to a
+// real HTTP server via client.Client, ensuring the proxy layer is covered.
+func TestClientBackend(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "backlog-client-backend-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	st, err := store.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+
+	r := chi.NewRouter()
+	h := server.NewAPIHandler(st)
+	h.RegisterRoutes(r)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	c := client.NewClient(ts.URL)
+	be := server.NewClientBackend(c)
+
+	// CreateProject (delegates to client, which is already covered, but needed for setup)
+	_, err = be.CreateProject("cb-proj", "CB Proj", "desc")
+	if err != nil {
+		t.Fatalf("CreateProject via clientBackend failed: %v", err)
+	}
+
+	// ListProjects (0% in clientBackend)
+	projs, err := be.ListProjects()
+	if err != nil || len(projs) != 1 {
+		t.Fatalf("ListProjects via clientBackend: expected 1 project, got %d err=%v", len(projs), err)
+	}
+
+	// GetProject (0% in clientBackend)
+	p, err := be.GetProject("cb-proj")
+	if err != nil || p.Slug != "cb-proj" {
+		t.Fatalf("GetProject via clientBackend failed: %v / %+v", err, p)
+	}
+
+	// AddTask to have data for subsequent operations
+	task, err := be.AddTask("cb-proj", model.Task{
+		Title: "CB Task",
+		Size:  model.SizeS,
+		Tier:  model.Tier1,
+	})
+	if err != nil {
+		t.Fatalf("AddTask via clientBackend failed: %v", err)
+	}
+
+	// ListTasks (0% in clientBackend)
+	tasks, err := be.ListTasks("cb-proj", model.TaskFilter{})
+	if err != nil || len(tasks) != 1 {
+		t.Fatalf("ListTasks via clientBackend: expected 1 task, got %d err=%v", len(tasks), err)
+	}
+
+	// UpdateTask (0% in clientBackend)
+	_, err = be.UpdateTask("cb-proj", model.Task{ID: task.ID, Title: "CB Task Updated"})
+	if err != nil {
+		t.Fatalf("UpdateTask via clientBackend failed: %v", err)
+	}
+
+	// AssignTask (0% in clientBackend)
+	_, err = be.AssignTask("cb-proj", task.ID, "dev")
+	if err != nil {
+		t.Fatalf("AssignTask via clientBackend failed: %v", err)
+	}
+
+	// CompleteTask (0% in clientBackend)
+	_, err = be.CompleteTask("cb-proj", task.ID, true, "done")
+	if err != nil {
+		t.Fatalf("CompleteTask via clientBackend failed: %v", err)
+	}
+
+	// GetSummary (already covered but verify it works through clientBackend)
+	sum, err := be.GetSummary("cb-proj")
+	if err != nil || sum.TotalTasks != 1 {
+		t.Fatalf("GetSummary via clientBackend failed: %v / %+v", err, sum)
+	}
+
+	// GetTopPriorities (0% in clientBackend)
+	_, err = be.GetTopPriorities("cb-proj", 5)
+	if err != nil {
+		t.Fatalf("GetTopPriorities via clientBackend failed: %v", err)
+	}
+
+	// DeleteTask (0% in clientBackend)
+	err = be.DeleteTask("cb-proj", task.ID)
+	if err != nil {
+		t.Fatalf("DeleteTask via clientBackend failed: %v", err)
+	}
+
+	// DeleteProject (already covered but exercises the proxy)
+	err = be.DeleteProject("cb-proj")
+	if err != nil {
+		t.Fatalf("DeleteProject via clientBackend failed: %v", err)
 	}
 }

@@ -58,7 +58,7 @@ func TestClientEndToEnd(t *testing.T) {
 		t.Fatalf("expected 0 initial projects, got %d", len(projs))
 	}
 
-	// 3. CreateProject & SetActiveProject
+	// 3. CreateProject & GetProject
 	p2, err := c.CreateProject("api-client", "API Client Proj", "For testing client")
 	if err != nil {
 		t.Fatalf("CreateProject failed: %v", err)
@@ -70,16 +70,6 @@ func TestClientEndToEnd(t *testing.T) {
 	projsAfter, err := c.ListProjects()
 	if err != nil || len(projsAfter) != 1 {
 		t.Fatalf("expected 1 project after creation, got %d", len(projsAfter))
-	}
-
-	err = c.SetActiveProject("api-client")
-	if err != nil {
-		t.Fatalf("SetActiveProject failed: %v", err)
-	}
-
-	active, err := c.GetActiveProject()
-	if err != nil || active.Slug != "api-client" {
-		t.Fatalf("expected active project api-client, got %+v", active)
 	}
 
 	gotProj, err := c.GetProject("api-client")

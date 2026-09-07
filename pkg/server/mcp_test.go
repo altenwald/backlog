@@ -185,7 +185,7 @@ func TestMCPServerTools(t *testing.T) {
 		t.Fatalf("expected top priorities, got %s", string(topRespBytes))
 	}
 
-	// 11. Test list_projects & set_active_project via MCP
+	// 11. Test list_projects & verify project is required for task tools via MCP
 	listProjsMsg := []byte(`{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"list_projects","arguments":{}}}`)
 	listProjsResp := srv.HandleMessage(context.Background(), listProjsMsg)
 	listProjsBytes, _ := json.Marshal(listProjsResp)
@@ -193,15 +193,24 @@ func TestMCPServerTools(t *testing.T) {
 		t.Fatalf("expected newproj in list, got %s", string(listProjsBytes))
 	}
 
-	setActiveMsg := []byte(`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"set_active_project","arguments":{"project":"newproj"}}}`)
+	// Calling list_tasks without project must fail with error
+	noProjMsg := []byte(`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"list_tasks","arguments":{}}}`)
+	noProjResp := srv.HandleMessage(context.Background(), noProjMsg)
+	noProjBytes, _ := json.Marshal(noProjResp)
+	if !strings.Contains(string(noProjBytes), "parameter 'project' is required") {
+		t.Fatalf("expected error when project is missing, got %s", string(noProjBytes))
+	}
+
+	// Verify set_active_project tool is removed (tool not found)
+	setActiveMsg := []byte(`{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"set_active_project","arguments":{"project":"newproj"}}}`)
 	setActiveResp := srv.HandleMessage(context.Background(), setActiveMsg)
 	setActiveBytes, _ := json.Marshal(setActiveResp)
-	if !strings.Contains(string(setActiveBytes), "switched to") {
-		t.Fatalf("expected active project set, got %s", string(setActiveBytes))
+	if !strings.Contains(string(setActiveBytes), "not found") && !strings.Contains(string(setActiveBytes), "Unknown tool") {
+		t.Fatalf("expected tool not found for set_active_project, got %s", string(setActiveBytes))
 	}
 
 	// 12. Test complete_task via MCP
-	completeMsg := []byte(`{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"complete_task","arguments":{"project":"newproj","task_id":"1","resolution":"done via mcp"}}}`)
+	completeMsg := []byte(`{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"complete_task","arguments":{"project":"newproj","task_id":"1","resolution":"done via mcp"}}}`)
 	completeResp := srv.HandleMessage(context.Background(), completeMsg)
 	completeBytes, _ := json.Marshal(completeResp)
 	if !strings.Contains(string(completeBytes), "completed in 'newproj'") {

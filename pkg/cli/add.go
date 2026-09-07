@@ -41,11 +41,7 @@ var addCmd = &cobra.Command{
 
 		proj := resolveProject(flagProject)
 		if proj == "" {
-			active, err := c.GetActiveProject()
-			if err != nil {
-				return err
-			}
-			proj = active.Slug
+			return fmt.Errorf("must specify a project via --project (-p) or BACKLOG_PROJECT environment variable")
 		}
 
 		tier := model.Tier3

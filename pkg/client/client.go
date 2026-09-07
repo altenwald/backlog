@@ -42,7 +42,6 @@ type ProjectInfo struct {
 	Slug        string         `json:"slug"`
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
-	Active      bool           `json:"active"`
 	Summary     *model.Summary `json:"summary"`
 }
 
@@ -62,22 +61,6 @@ func (c *Client) ListProjects() ([]ProjectInfo, error) {
 	return projects, err
 }
 
-func (c *Client) GetActiveProject() (*ProjectInfo, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/api/projects/active")
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server error: %s", resp.Status)
-	}
-
-	var p ProjectInfo
-	err = json.NewDecoder(resp.Body).Decode(&p)
-	return &p, err
-}
-
 func (c *Client) GetProject(slug string) (*model.Project, error) {
 	resp, err := c.httpClient.Get(fmt.Sprintf("%s/api/projects/%s", c.baseURL, url.PathEscape(slug)))
 	if err != nil {
@@ -92,20 +75,6 @@ func (c *Client) GetProject(slug string) (*model.Project, error) {
 	var p model.Project
 	err = json.NewDecoder(resp.Body).Decode(&p)
 	return &p, err
-}
-
-func (c *Client) SetActiveProject(slug string) error {
-	body, _ := json.Marshal(map[string]string{"slug": slug})
-	resp, err := c.httpClient.Post(c.baseURL+"/api/projects/active", "application/json", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server error: %s", resp.Status)
-	}
-	return nil
 }
 
 func (c *Client) CreateProject(slug, name, description string) (*model.Project, error) {

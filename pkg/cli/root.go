@@ -36,7 +36,7 @@ func Execute() {
 }
 
 func init() {
-	RootCmd.PersistentFlags().StringVarP(&flagProject, "project", "p", "", "Target project slug (defaults to BACKLOG_PROJECT env or active project)")
+	RootCmd.PersistentFlags().StringVarP(&flagProject, "project", "p", "", "Target project slug (defaults to BACKLOG_PROJECT env var)")
 	RootCmd.PersistentFlags().StringVar(&flagAPIURL, "api-url", "http://127.0.0.1:8484", "Backlog daemon REST API URL")
 	RootCmd.PersistentFlags().StringVar(&flagDataDir, "data-dir", "", "Data directory path (defaults to ~/.config/backlog)")
 	RootCmd.PersistentFlags().IntVar(&flagPort, "port", 8484, "Local port for REST API and MCP SSE")

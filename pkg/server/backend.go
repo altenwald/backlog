@@ -9,16 +9,12 @@ import (
 type ProjectSummaryItem struct {
 	Slug       string `json:"slug"`
 	Name       string `json:"name"`
-	Active     bool   `json:"active"`
 	OpenTasks  int    `json:"open_tasks"`
 	TotalTasks int    `json:"total_tasks"`
 }
 
 type Backend interface {
 	ListProjects() ([]ProjectSummaryItem, error)
-	GetActiveProject() (map[string]any, error)
-	GetActiveProjectSlug() string
-	SetActiveProject(slug string) error
 	CreateProject(slug, name, desc string) (*model.Project, error)
 	GetProject(slug string) (*model.Project, error)
 	GetSummary(slug string) (*model.Summary, error)
@@ -43,7 +39,6 @@ func NewStoreBackend(st *store.Store) Backend {
 
 func (b *storeBackend) ListProjects() ([]ProjectSummaryItem, error) {
 	projects := b.st.ListProjects()
-	active := b.st.GetActiveProjectSlug()
 	var items []ProjectSummaryItem
 	for _, p := range projects {
 		sum, _ := b.st.GetSummary(p.Slug)
@@ -55,35 +50,11 @@ func (b *storeBackend) ListProjects() ([]ProjectSummaryItem, error) {
 		items = append(items, ProjectSummaryItem{
 			Slug:       p.Slug,
 			Name:       p.Name,
-			Active:     p.Slug == active,
 			OpenTasks:  openTasks,
 			TotalTasks: totalTasks,
 		})
 	}
 	return items, nil
-}
-
-func (b *storeBackend) GetActiveProjectSlug() string {
-	return b.st.GetActiveProjectSlug()
-}
-
-func (b *storeBackend) GetActiveProject() (map[string]any, error) {
-	active := b.st.GetActiveProjectSlug()
-	p, err := b.st.GetProject(active)
-	if err != nil {
-		return nil, err
-	}
-	sum, _ := b.st.GetSummary(active)
-	return map[string]any{
-		"active_project": active,
-		"name":           p.Name,
-		"description":    p.Description,
-		"summary":        sum,
-	}, nil
-}
-
-func (b *storeBackend) SetActiveProject(slug string) error {
-	return b.st.SetActiveProject(slug)
 }
 
 func (b *storeBackend) CreateProject(slug, name, desc string) (*model.Project, error) {
@@ -154,37 +125,11 @@ func (b *clientBackend) ListProjects() ([]ProjectSummaryItem, error) {
 		items = append(items, ProjectSummaryItem{
 			Slug:       p.Slug,
 			Name:       p.Name,
-			Active:     p.Active,
 			OpenTasks:  openTasks,
 			TotalTasks: totalTasks,
 		})
 	}
 	return items, nil
-}
-
-func (b *clientBackend) GetActiveProjectSlug() string {
-	act, err := b.c.GetActiveProject()
-	if err != nil || act == nil {
-		return ""
-	}
-	return act.Slug
-}
-
-func (b *clientBackend) GetActiveProject() (map[string]any, error) {
-	act, err := b.c.GetActiveProject()
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"active_project": act.Slug,
-		"name":           act.Name,
-		"description":    act.Description,
-		"summary":        act.Summary,
-	}, nil
-}
-
-func (b *clientBackend) SetActiveProject(slug string) error {
-	return b.c.SetActiveProject(slug)
 }
 
 func (b *clientBackend) CreateProject(slug, name, desc string) (*model.Project, error) {

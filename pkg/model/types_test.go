@@ -17,14 +17,47 @@ func TestSizeWeight(t *testing.T) {
 			model.SizeXL.Weight(), model.SizeL.Weight(), model.SizeM.Weight(),
 			model.SizeS.Weight(), model.SizeXS.Weight())
 	}
+	// Default branch: unknown size returns 3 (same as M)
+	if got := model.Size("UNKNOWN").Weight(); got != 3 {
+		t.Fatalf("expected default Weight=3, got %d", got)
+	}
 }
 
 func TestTierLabels(t *testing.T) {
-	if model.Tier1.ShortLabel() != "T1" || model.Tier5.ShortLabel() != "T5" {
-		t.Fatalf("unexpected short label: T1=%s, T5=%s", model.Tier1.ShortLabel(), model.Tier5.ShortLabel())
+	// ShortLabel for all defined tiers
+	shortLabels := map[model.Tier]string{
+		model.Tier1: "T1",
+		model.Tier2: "T2",
+		model.Tier3: "T3",
+		model.Tier4: "T4",
+		model.Tier5: "T5",
 	}
-	if model.Tier1.Label() != "Blocker (T1)" {
-		t.Fatalf("unexpected label: %s", model.Tier1.Label())
+	for tier, expected := range shortLabels {
+		if got := tier.ShortLabel(); got != expected {
+			t.Fatalf("ShortLabel(%d): expected %s, got %s", tier, expected, got)
+		}
+	}
+	// Default branch for ShortLabel (unknown tier)
+	if got := model.Tier(99).ShortLabel(); got != "T3" {
+		t.Fatalf("ShortLabel default: expected T3, got %s", got)
+	}
+
+	// Label for all defined tiers
+	labels := map[model.Tier]string{
+		model.Tier1: "Blocker (T1)",
+		model.Tier2: "Important (T2)",
+		model.Tier3: "Visual debt (T3)",
+		model.Tier4: "Internal (T4)",
+		model.Tier5: "Future (T5)",
+	}
+	for tier, expected := range labels {
+		if got := tier.Label(); got != expected {
+			t.Fatalf("Label(%d): expected %s, got %s", tier, expected, got)
+		}
+	}
+	// Default branch for Label (unknown tier)
+	if got := model.Tier(99).Label(); got != "Visual debt (T3)" {
+		t.Fatalf("Label default: expected 'Visual debt (T3)', got %s", got)
 	}
 }
 

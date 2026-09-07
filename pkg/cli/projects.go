@@ -23,30 +23,21 @@ var projectsCmd = &cobra.Command{
 				return err
 			}
 			for _, p := range projects {
-				activeIndicator := "  "
-				if p.Active {
-					activeIndicator = "● "
-				}
 				open := 0
 				total := 0
 				if p.Summary != nil {
 					open = p.Summary.OpenTasks
 					total = p.Summary.TotalTasks
 				}
-				fmt.Printf("%s%-12s (%-15s) %3d/%-3d open\n",
-					activeIndicator, p.Slug, p.Name, open, total)
+				fmt.Printf("  %-12s (%-15s) %3d/%-3d open\n",
+					p.Slug, p.Name, open, total)
 			}
 		} else {
 			st, err := store.NewStore(flagDataDir)
 			if err != nil {
 				return err
 			}
-			activeSlug := st.GetActiveProjectSlug()
 			for _, p := range st.ListProjects() {
-				activeIndicator := "  "
-				if p.Slug == activeSlug {
-					activeIndicator = "● "
-				}
 				sum, _ := st.GetSummary(p.Slug)
 				open := 0
 				total := 0
@@ -54,8 +45,8 @@ var projectsCmd = &cobra.Command{
 					open = sum.OpenTasks
 					total = sum.TotalTasks
 				}
-				fmt.Printf("%s%-12s (%-15s) %3d/%-3d open\n",
-					activeIndicator, p.Slug, p.Name, open, total)
+				fmt.Printf("  %-12s (%-15s) %3d/%-3d open\n",
+					p.Slug, p.Name, open, total)
 			}
 		}
 
@@ -65,32 +56,7 @@ var projectsCmd = &cobra.Command{
 
 var projectCmd = &cobra.Command{
 	Use:   "project",
-	Short: "Manage projects (use, create)",
-}
-
-var projectUseCmd = &cobra.Command{
-	Use:   "use <slug>",
-	Short: "Set active project in the GUI and System Tray",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		slug := strings.ToLower(args[0])
-		c := client.NewClient(flagAPIURL)
-		if c.IsServerRunning() {
-			if err := c.SetActiveProject(slug); err != nil {
-				return err
-			}
-		} else {
-			st, err := store.NewStore(flagDataDir)
-			if err != nil {
-				return err
-			}
-			if err := st.SetActiveProject(slug); err != nil {
-				return err
-			}
-		}
-		fmt.Printf("✔ Active project switched to: %s\n", slug)
-		return nil
-	},
+	Short: "Manage projects (new, delete)",
 }
 
 var (
@@ -160,7 +126,6 @@ func init() {
 	projectNewCmd.Flags().StringVarP(&newProjName, "name", "n", "", "Public display name of the project")
 	projectNewCmd.Flags().StringVar(&newProjDesc, "desc", "", "Project description")
 
-	projectCmd.AddCommand(projectUseCmd)
 	projectCmd.AddCommand(projectNewCmd)
 	projectCmd.AddCommand(projectDeleteCmd)
 
