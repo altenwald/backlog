@@ -1,4 +1,4 @@
-.PHONY: build test bundle clean
+.PHONY: build test bundle dmg clean
 
 APP_NAME = Backlog
 BUNDLE_DIR = bin/$(APP_NAME).app
@@ -62,5 +62,20 @@ bundle:
 	@echo "✔ Universal $(BUNDLE_DIR) created for macOS $(MIN_MACOS_VER)+!"
 	@file $(BUNDLE_DIR)/Contents/MacOS/backlog
 
+dmg: bundle
+	@echo "Creating DMG..."
+	@rm -rf bin/dmg_staging bin/$(APP_NAME).dmg bin/backlog-temp.dmg
+	@mkdir -p bin/dmg_staging
+	@cp -R $(BUNDLE_DIR) bin/dmg_staging/
+	@hdiutil create -volname "$(APP_NAME)" -srcfolder bin/dmg_staging -ov -format UDRW bin/backlog-temp.dmg
+	@rm -rf bin/dmg_staging
+	@DEVICE=$$(hdiutil attach -readwrite -noverify -noautoopen bin/backlog-temp.dmg | egrep '^/dev/' | sed 1q | awk '{print $$1}'); \
+	cd /Volumes/$(APP_NAME) && ln -s /Applications && cd -; \
+	hdiutil detach "$$DEVICE"
+	@hdiutil convert bin/backlog-temp.dmg -format UDZO -o bin/$(APP_NAME).dmg
+	@rm -f bin/backlog-temp.dmg
+	@echo "✔ bin/$(APP_NAME).dmg created!"
+
 clean:
 	rm -rf bin/
+

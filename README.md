@@ -59,6 +59,9 @@
 # Build universal macOS .app bundle
 make bundle
 
+# Build macOS .dmg installer
+make dmg
+
 # Build standalone CLI binary
 make build
 
@@ -66,7 +69,7 @@ make build
 make test
 ```
 
-The universal bundle will be available at `bin/Backlog.app`.
+The universal bundle will be available at `bin/Backlog.app` and the disk image installer at `bin/Backlog.dmg`.
 
 ---
 
