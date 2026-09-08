@@ -35,11 +35,15 @@ jobs:
           make bundle
 
       - name: Sign macOS App
-        if: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
         env:
           CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
           CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
         run: |
+          if [ -z "$CERTIFICATE_P12" ]; then
+            echo "Skipping code signing: MACOS_CERTIFICATE_P12 secret not provided."
+            exit 0
+          fi
+
           # 1. Create temporary isolated keychain
           security create-keychain -p "" build.keychain
           security default-keychain -s build.keychain
@@ -68,6 +72,8 @@ jobs:
             bin/Backlog.app
 
       - name: Create & Sign DMG
+        env:
+          CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
         run: |
           TAG="${{ github.ref_name || inputs.tag_name }}"
           mkdir -p dmg_staging dist
@@ -92,19 +98,23 @@ jobs:
           rm backlog-temp.dmg
 
           # Sign the DMG if certificate secret is available
-          if [ -n "${{ secrets.MACOS_CERTIFICATE_P12 }}" ]; then
+          if [ -n "$CERTIFICATE_P12" ]; then
             codesign --force --timestamp \
               --sign "Developer ID Application: Altenwald (9B5SR4AYZP)" \
               "$DMG"
           fi
 
       - name: Notarize and Staple DMG
-        if: ${{ secrets.MACOS_NOTARY_KEY != '' }}
         env:
           NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
           NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
         run: |
+          if [ -z "$NOTARY_KEY" ]; then
+            echo "Skipping notarization: MACOS_NOTARY_KEY secret not provided."
+            exit 0
+          fi
+
           TAG="${{ github.ref_name || inputs.tag_name }}"
           DMG="dist/backlog-${TAG}-darwin-universal.dmg"
 
