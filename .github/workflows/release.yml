@@ -34,6 +34,95 @@ jobs:
         run: |
           make bundle
 
+      - name: Sign macOS App
+        if: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+        env:
+          CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          # 1. Create temporary isolated keychain
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+
+          # 2. Decode and import Developer ID certificate
+          echo "$CERTIFICATE_P12" | base64 --decode > certificate.p12
+          security import certificate.p12 \
+            -k build.keychain \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple: -s -k "" build.keychain
+          rm certificate.p12
+
+          # 3. Sign inner binary and app bundle with Hardened Runtime and Timestamp
+          SIGN="Developer ID Application: Altenwald (9B5SR4AYZP)"
+          codesign --force --timestamp --options runtime \
+            --entitlements build/macos/entitlements.plist \
+            --sign "$SIGN" \
+            bin/Backlog.app/Contents/MacOS/backlog
+          codesign --force --timestamp --options runtime \
+            --entitlements build/macos/entitlements.plist \
+            --sign "$SIGN" \
+            bin/Backlog.app
+
+      - name: Create & Sign DMG
+        run: |
+          TAG="${{ github.ref_name || inputs.tag_name }}"
+          mkdir -p dmg_staging dist
+          cp -R bin/Backlog.app dmg_staging/
+
+          # Create DMG with symlink to /Applications
+          hdiutil create \
+            -volname "Backlog" \
+            -srcfolder dmg_staging \
+            -ov -format UDRW \
+            backlog-temp.dmg
+          rm -rf dmg_staging
+
+          DEVICE=$(hdiutil attach -readwrite -noverify -noautoopen backlog-temp.dmg | egrep '^/dev/' | sed 1q | awk '{print $1}')
+          cd /Volumes/Backlog && ln -s /Applications && cd -
+          hdiutil detach "$DEVICE"
+
+          DMG="dist/backlog-${TAG}-darwin-universal.dmg"
+          hdiutil convert backlog-temp.dmg \
+            -format UDZO \
+            -o "$DMG"
+          rm backlog-temp.dmg
+
+          # Sign the DMG if certificate secret is available
+          if [ -n "${{ secrets.MACOS_CERTIFICATE_P12 }}" ]; then
+            codesign --force --timestamp \
+              --sign "Developer ID Application: Altenwald (9B5SR4AYZP)" \
+              "$DMG"
+          fi
+
+      - name: Notarize and Staple DMG
+        if: ${{ secrets.MACOS_NOTARY_KEY != '' }}
+        env:
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          TAG="${{ github.ref_name || inputs.tag_name }}"
+          DMG="dist/backlog-${TAG}-darwin-universal.dmg"
+
+          echo "$NOTARY_KEY" | base64 --decode > notary_key.p8
+
+          xcrun notarytool submit "$DMG" \
+            --key notary_key.p8 \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" \
+            --wait
+
+          xcrun stapler staple "$DMG"
+          rm notary_key.p8
+          security delete-keychain build.keychain || true
+
+          # Attempt to staple the .app bundle directly so the zip also includes the ticket
+          xcrun stapler staple bin/Backlog.app || true
+
       - name: Package macOS artifacts
         run: |
           TAG="${{ github.ref_name || inputs.tag_name }}"
