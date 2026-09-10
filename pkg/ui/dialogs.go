@@ -10,8 +10,11 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
+	"github.com/altenwald/backlog/pkg/server"
+	"github.com/altenwald/backlog/pkg/store"
 	"github.com/altenwald/backlog/pkg/version"
 )
 
@@ -314,5 +317,103 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 	d := dialog.NewCustom("About Backlog", "Close", content, parent)
 	d.Resize(fyne.NewSize(480, 520))
+	d.Show()
+}
+
+// ShowSettingsDialog opens the application settings dialog.
+// The core Backlog instructions are shown read-only; the user can freely edit
+// the custom instructions section that is appended to the core prompt.
+func ShowSettingsDialog(parent fyne.Window, st *store.Store) {
+	// ── Core instructions (read-only) ──────────────────────────────────────
+	coreEntry := widget.NewMultiLineEntry()
+	coreEntry.Wrapping = fyne.TextWrapWord
+	coreEntry.SetText(server.BacklogCoreInstructions)
+	coreEntry.Disable()
+	coreEntry.SetMinRowsVisible(10)
+
+	coreLockLabel := widget.NewLabelWithStyle(
+		"🔒 Core instructions — read-only (defines the Backlog tool protocol)",
+		fyne.TextAlignLeading,
+		fyne.TextStyle{Italic: true},
+	)
+	coreLockLabel.Wrapping = fyne.TextWrapWord
+
+	coreSection := container.NewBorder(
+		container.NewVBox(
+			widget.NewSeparator(),
+			coreLockLabel,
+		),
+		nil, nil, nil,
+		coreEntry,
+	)
+
+	// ── Custom / user instructions (editable) ──────────────────────────────
+	customEntry := widget.NewMultiLineEntry()
+	customEntry.Wrapping = fyne.TextWrapWord
+	customEntry.SetMinRowsVisible(10)
+	customEntry.SetPlaceHolder("Add your own methodology, conventions, or workflow rules here…")
+
+	// Load persisted instructions (fall back to default when empty)
+	saved := st.GetMCPUserInstructions()
+	if saved == "" {
+		customEntry.SetText(strings.TrimSpace(server.BacklogDefaultUserInstructions))
+	} else {
+		customEntry.SetText(saved)
+	}
+
+	resetBtn := widget.NewButtonWithIcon("Reset to default", theme.ContentRedoIcon(), func() {
+		customEntry.SetText(strings.TrimSpace(server.BacklogDefaultUserInstructions))
+	})
+	resetBtn.Importance = widget.LowImportance
+
+	customLabel := widget.NewLabelWithStyle(
+		"✏️ Custom instructions — appended after core (editable)",
+		fyne.TextAlignLeading,
+		fyne.TextStyle{Italic: true},
+	)
+	customLabel.Wrapping = fyne.TextWrapWord
+
+	customSection := container.NewBorder(
+		container.NewVBox(
+			widget.NewSeparator(),
+			container.NewBorder(nil, nil, customLabel, resetBtn),
+		),
+		nil, nil, nil,
+		customEntry,
+	)
+
+	// ── Layout ─────────────────────────────────────────────────────────────
+	tabs := container.NewVSplit(coreSection, customSection)
+	tabs.SetOffset(0.4)
+
+	var d dialog.Dialog
+	saveBtn := widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() {
+		text := strings.TrimSpace(customEntry.Text)
+		// Storing empty string means "use default" at next MCP launch
+		if text == strings.TrimSpace(server.BacklogDefaultUserInstructions) {
+			text = ""
+		}
+		if err := st.SaveMCPUserInstructions(text); err != nil {
+			dialog.ShowError(err, parent)
+			return
+		}
+		d.Hide()
+	})
+	saveBtn.Importance = widget.HighImportance
+
+	cancelBtn := widget.NewButton("Cancel", func() { d.Hide() })
+
+	buttons := container.NewHBox(cancelBtn, saveBtn)
+	buttonsRight := container.NewBorder(nil, nil, nil, buttons)
+
+	content := container.NewBorder(
+		nil,
+		container.NewVBox(widget.NewSeparator(), buttonsRight),
+		nil, nil,
+		tabs,
+	)
+
+	d = dialog.NewCustomWithoutButtons("Settings — MCP Instructions", content, parent)
+	d.Resize(fyne.NewSize(680, 620))
 	d.Show()
 }

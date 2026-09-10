@@ -14,7 +14,9 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-const BacklogInstructions = `You are connected to Backlog, an issue and task tracking management system for software engineering.
+// BacklogCoreInstructions is the immutable part of the MCP system prompt.
+// It describes the Backlog tool protocol and MUST NOT be modified by users.
+const BacklogCoreInstructions = `You are connected to Backlog, an issue and task tracking management system for software engineering.
 Follow this standard protocol when interacting with Backlog:
 
 0. MULTI-PROJECT REQUIREMENT:
@@ -29,22 +31,17 @@ Follow this standard protocol when interacting with Backlog:
 2. PERIODIC ASSIGNMENT CHECKING:
    - While working in the session, between tasks or when completing a milestone, periodically check 'list_tasks(project="<project-slug>", assignee="<your-handle>", done=false)' to discover if the user or another agent has assigned you new tasks in the GUI.
 
-3. WORKFLOW LIFECYCLE & STRICT TDD REQUIREMENT:
+3. WORKFLOW LIFECYCLE:
    - Discover: If you have no assigned tasks, use 'get_top_priorities(project="<project-slug>")' or 'list_tasks(project="<project-slug>", assignee="unassigned", done=false)' to find pending work.
    - Claim & Assign: BEFORE starting work on a task, call 'assign_task(project="<project-slug>", task_id="<ID>", assignee="<your-handle>")'. This updates the Backlog GUI in real time and signals that the task is currently in progress.
-   - Strict TDD (Test-Driven Development):
-     * Always develop following a strict TDD methodology: write or update tests FIRST to specify the expected behavior.
-     * Implement the code changes to satisfy the tests.
-     * Maximize test coverage: ensure thorough coverage for all new or modified code paths.
-     * ZERO COVERAGE REGRESSION: The overall project test coverage percentage MUST NOT decrease with any new commit.
    - Git Commit Requirement:
-     * The work for every task MUST culminate in a Git commit once tests pass and coverage is verified.
+     * The work for every task MUST culminate in a Git commit once the implementation is complete.
    - Complete with Commit Hash:
      * Once committed, call 'complete_task(project="<project-slug>", task_id="<ID>", done=true, resolution="...")'.
      * The 'resolution' field MUST explicitly include:
        1) The Git commit hash created (e.g. 'Commit: abc1234').
        2) Summary of implementation details and architectural decisions.
-       3) Files modified and test verification / coverage results.
+       3) Files modified and verification results.
 
 4. ESTIMATION AND PRIORITY TIERS:
    - Priority Tiers (1 to 5):
@@ -65,18 +62,47 @@ Follow this standard protocol when interacting with Backlog:
      * CRITICAL AGENT RULE: Never pick or start work on a task that is BLOCKED. Always resolve the blocking dependencies first.
 
 5. REPORTING:
-   - Always inform the user when claiming a task, report test coverage results, and report completion with the commit hash and resolution summary.`
+   - Always inform the user when claiming a task, report implementation results, and report completion with the commit hash and resolution summary.`
+
+// BacklogDefaultUserInstructions is the default editable section appended to the core instructions.
+// Users can replace or extend this text from Settings to match their team's methodology.
+const BacklogDefaultUserInstructions = `
+6. DEVELOPMENT METHODOLOGY:
+   - Strict TDD (Test-Driven Development):
+     * Always develop following a strict TDD methodology: write or update tests FIRST to specify the expected behavior.
+     * Implement the code changes to satisfy the tests.
+     * Maximize test coverage: ensure thorough coverage for all new or modified code paths.
+     * ZERO COVERAGE REGRESSION: The overall project test coverage percentage MUST NOT decrease with any new commit.`
+
+// BuildInstructions composes the full MCP system prompt from the immutable core and
+// the user-supplied instructions. If userInstructions is empty, the default is used.
+func BuildInstructions(userInstructions string) string {
+	custom := strings.TrimSpace(userInstructions)
+	if custom == "" {
+		custom = BacklogDefaultUserInstructions
+	}
+	return BacklogCoreInstructions + "\n" + custom
+}
+
+// BacklogInstructions is kept for backwards compatibility (e.g. tests that reference it directly).
+// It returns the full instructions with the default user section.
+var BacklogInstructions = BuildInstructions("")
 
 func NewMCPServer(st *store.Store) *server.MCPServer {
-	return NewMCPServerWithBackend(NewStoreBackend(st))
+	instructions := BuildInstructions(st.GetMCPUserInstructions())
+	return newMCPServerWithInstructions(NewStoreBackend(st), instructions)
 }
 
 func NewMCPServerWithBackend(be Backend) *server.MCPServer {
+	return newMCPServerWithInstructions(be, BuildInstructions(""))
+}
+
+func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPServer {
 	s := server.NewMCPServer(
 		"backlog",
 		version.Version,
 		server.WithLogging(),
-		server.WithInstructions(BacklogInstructions),
+		server.WithInstructions(instructions),
 	)
 
 	// Resource: backlog://workflow
@@ -87,7 +113,7 @@ func NewMCPServerWithBackend(be Backend) *server.MCPServer {
 				mcp.TextResourceContents{
 					URI:      "backlog://workflow",
 					MIMEType: "text/markdown",
-					Text:     BacklogInstructions,
+					Text:     instructions,
 				},
 			}, nil
 		},

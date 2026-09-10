@@ -287,3 +287,33 @@ func TestMCPServerWithClientBackend(t *testing.T) {
 		t.Fatal("expected project 'testhttp' to be deleted from store")
 	}
 }
+
+func TestBuildInstructions(t *testing.T) {
+	// Empty input -> core + default user instructions
+	full := BuildInstructions("")
+	if !strings.Contains(full, BacklogCoreInstructions) {
+		t.Fatal("BuildInstructions('') should contain BacklogCoreInstructions")
+	}
+	if !strings.Contains(full, strings.TrimSpace(BacklogDefaultUserInstructions)) {
+		t.Fatal("BuildInstructions('') should contain BacklogDefaultUserInstructions when no custom text given")
+	}
+
+	// Custom input -> core + custom (NOT the default)
+	custom := "9. ALWAYS write code in Erlang."
+	result := BuildInstructions(custom)
+	if !strings.Contains(result, BacklogCoreInstructions) {
+		t.Fatal("BuildInstructions(custom) should still contain BacklogCoreInstructions")
+	}
+	if !strings.Contains(result, custom) {
+		t.Fatalf("BuildInstructions(custom) should contain custom text, got: %q", result)
+	}
+	if strings.Contains(result, strings.TrimSpace(BacklogDefaultUserInstructions)) {
+		t.Fatal("BuildInstructions(custom) should NOT contain default user instructions when custom text is provided")
+	}
+
+	// Whitespace-only input treated as empty -> falls back to default
+	wsResult := BuildInstructions("   \n  ")
+	if !strings.Contains(wsResult, strings.TrimSpace(BacklogDefaultUserInstructions)) {
+		t.Fatal("BuildInstructions with whitespace-only should fall back to default user instructions")
+	}
+}

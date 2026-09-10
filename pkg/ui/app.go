@@ -53,11 +53,14 @@ func NewBacklogApp(st *store.Store) *BacklogApp {
 
 	bApp.buildUI()
 
-	// Set Main Menu with About item (intercepts macOS "About Backlog")
+	// Set Main Menu with About and Settings items (intercepts macOS application menu)
 	aboutMenuItem := fyne.NewMenuItem("About", func() {
 		ShowAboutDialog(w)
 	})
-	appMenu := fyne.NewMenu("Backlog", aboutMenuItem)
+	settingsMenuItem := fyne.NewMenuItem("Settings...", func() {
+		ShowSettingsDialog(w, st)
+	})
+	appMenu := fyne.NewMenu("Backlog", aboutMenuItem, fyne.NewMenuItemSeparator(), settingsMenuItem)
 	mainMenu := fyne.NewMainMenu(appMenu)
 	w.SetMainMenu(mainMenu)
 

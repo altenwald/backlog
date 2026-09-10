@@ -35,7 +35,8 @@ type Event struct {
 }
 
 type Config struct {
-	ActiveProject string `json:"active_project"`
+	ActiveProject       string `json:"active_project"`
+	MCPUserInstructions string `json:"mcp_user_instructions,omitempty"`
 }
 
 type Store struct {
@@ -831,4 +832,20 @@ func (s *Store) DeleteTask(projectSlug string, taskID string) error {
 		TaskID:      taskID,
 	})
 	return nil
+}
+
+// GetMCPUserInstructions returns the user-defined portion of MCP instructions.
+// Returns an empty string when the user has not set custom instructions yet.
+func (s *Store) GetMCPUserInstructions() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.config.MCPUserInstructions
+}
+
+// SaveMCPUserInstructions persists the user-defined portion of MCP instructions.
+func (s *Store) SaveMCPUserInstructions(instructions string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.config.MCPUserInstructions = instructions
+	return s.saveConfig()
 }

@@ -440,4 +440,40 @@ func TestStoreEvents(t *testing.T) {
 	}
 }
 
+func TestMCPUserInstructions(t *testing.T) {
+	st, tmpDir := setupTestStore(t)
+	defer os.RemoveAll(tmpDir)
 
+	// Default: empty string before any save
+	if got := st.GetMCPUserInstructions(); got != "" {
+		t.Fatalf("expected empty initial instructions, got: %q", got)
+	}
+
+	// Save custom instructions
+	custom := "6. MY CUSTOM RULE: always prefer simplicity over cleverness."
+	if err := st.SaveMCPUserInstructions(custom); err != nil {
+		t.Fatalf("SaveMCPUserInstructions failed: %v", err)
+	}
+
+	// Retrieve in same store instance
+	if got := st.GetMCPUserInstructions(); got != custom {
+		t.Fatalf("GetMCPUserInstructions: expected %q, got %q", custom, got)
+	}
+
+	// Verify persistence: reload store from same directory
+	st2, err := store.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to reload store: %v", err)
+	}
+	if got := st2.GetMCPUserInstructions(); got != custom {
+		t.Fatalf("persisted instructions not loaded: expected %q, got %q", custom, got)
+	}
+
+	// Clearing (save empty string) reverts to empty
+	if err := st.SaveMCPUserInstructions(""); err != nil {
+		t.Fatalf("SaveMCPUserInstructions('') failed: %v", err)
+	}
+	if got := st.GetMCPUserInstructions(); got != "" {
+		t.Fatalf("expected empty after clear, got: %q", got)
+	}
+}
