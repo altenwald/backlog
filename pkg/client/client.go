@@ -305,3 +305,52 @@ func (c *Client) DeleteProject(slug string) error {
 	}
 	return nil
 }
+
+type SettingsInfo struct {
+	MCPUserInstructions string `json:"mcp_user_instructions"`
+}
+
+// GetSettings retrieves the current user-editable settings from the daemon.
+func (c *Client) GetSettings() (*SettingsInfo, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/api/settings")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error: %s", resp.Status)
+	}
+
+	var s SettingsInfo
+	err = json.NewDecoder(resp.Body).Decode(&s)
+	return &s, err
+}
+
+// UpdateSettings persists user-editable settings on the daemon.
+func (c *Client) UpdateSettings(s SettingsInfo) (*SettingsInfo, error) {
+	body, err := json.Marshal(s)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, c.baseURL+"/api/settings", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error: %s", resp.Status)
+	}
+
+	var updated SettingsInfo
+	err = json.NewDecoder(resp.Body).Decode(&updated)
+	return &updated, err
+}

@@ -317,3 +317,59 @@ func TestBuildInstructions(t *testing.T) {
 		t.Fatal("BuildInstructions with whitespace-only should fall back to default user instructions")
 	}
 }
+
+func TestMCPSettingsTools(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "backlog-mcp-settings-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	st, err := store.NewStore(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewMCPServer(st)
+
+	// 1. Call get_settings initially
+	getMsg := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_settings","arguments":{}}}`)
+	getResp := srv.HandleMessage(context.Background(), getMsg)
+	getRespBytes, _ := json.Marshal(getResp)
+	if !strings.Contains(string(getRespBytes), "core_instructions") || !strings.Contains(string(getRespBytes), "using_default") {
+		t.Fatalf("unexpected get_settings response: %s", string(getRespBytes))
+	}
+
+	// 2. Call update_settings with custom instructions
+	updateMsg := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"update_settings","arguments":{"instructions":"7. CUSTOM RULE: always do TDD."}}}`)
+	updateResp := srv.HandleMessage(context.Background(), updateMsg)
+	updateRespBytes, _ := json.Marshal(updateResp)
+	if !strings.Contains(string(updateRespBytes), "Settings updated successfully") {
+		t.Fatalf("expected settings updated, got %s", string(updateRespBytes))
+	}
+
+	// 3. Verify in store
+	if st.GetMCPUserInstructions() != "7. CUSTOM RULE: always do TDD." {
+		t.Fatalf("expected custom instructions in store, got %q", st.GetMCPUserInstructions())
+	}
+
+	// 4. Call get_settings again, verify custom instructions reflected
+	getResp2 := srv.HandleMessage(context.Background(), getMsg)
+	getResp2Bytes, _ := json.Marshal(getResp2)
+	if !strings.Contains(string(getResp2Bytes), "always do TDD") {
+		t.Fatalf("expected get_settings to contain custom rule, got %s", string(getResp2Bytes))
+	}
+
+	// 5. Reset settings using reset_to_default
+	resetMsg := []byte(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"update_settings","arguments":{"reset_to_default":true}}}`)
+	resetResp := srv.HandleMessage(context.Background(), resetMsg)
+	resetRespBytes, _ := json.Marshal(resetResp)
+	if !strings.Contains(string(resetRespBytes), "Settings reset to default") {
+		t.Fatalf("expected settings reset, got %s", string(resetRespBytes))
+	}
+
+	// 6. Verify in store
+	if st.GetMCPUserInstructions() != "" {
+		t.Fatalf("expected empty custom instructions in store, got %q", st.GetMCPUserInstructions())
+	}
+}

@@ -100,6 +100,11 @@ backlog done 2 -r "Implemented PKCE with automatic refresh rotation in commit ab
 # Project management
 backlog projects
 backlog project new backend --name "Backend Service"
+
+# Settings & MCP instructions
+backlog settings get
+backlog settings set "Custom team rules, TDD requirements, and workflow guidelines"
+backlog settings reset
 ```
 
 > **Note:** All task commands require a project. Set it via `--project <slug>` or the `BACKLOG_PROJECT` environment variable.

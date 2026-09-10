@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/altenwald/backlog/pkg/model"
+	"github.com/altenwald/backlog/pkg/server"
 	"github.com/altenwald/backlog/pkg/store"
+	"github.com/go-chi/chi/v5"
 )
 
 func TestPrintTasksHierarchically(t *testing.T) {
@@ -160,5 +163,90 @@ func TestResolveProject(t *testing.T) {
 	got = resolveProject("")
 	if got != "" {
 		t.Fatalf("expected empty string, got %s", got)
+	}
+}
+
+func TestCLISettingsCommands(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "backlog-cli-settings-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldDataDir := flagDataDir
+	oldAPIURL := flagAPIURL
+	defer func() {
+		flagDataDir = oldDataDir
+		flagAPIURL = oldAPIURL
+	}()
+
+	flagDataDir = tmpDir
+	flagAPIURL = "http://127.0.0.1:59998" // unreachable -> uses local store
+
+	// 1. Get initial settings (store mode)
+	if err := settingsGetCmd.RunE(settingsGetCmd, []string{}); err != nil {
+		t.Fatalf("settingsGetCmd failed: %v", err)
+	}
+
+	// 2. Set custom instructions (store mode)
+	custom := "8. CLI RULE: maintain 100% tests."
+	if err := settingsSetCmd.RunE(settingsSetCmd, []string{custom}); err != nil {
+		t.Fatalf("settingsSetCmd failed: %v", err)
+	}
+
+	// 3. Get updated settings (store mode)
+	if err := settingsGetCmd.RunE(settingsGetCmd, []string{}); err != nil {
+		t.Fatalf("settingsGetCmd after set failed: %v", err)
+	}
+
+	// 4. Reset instructions (store mode)
+	if err := settingsResetCmd.RunE(settingsResetCmd, []string{}); err != nil {
+		t.Fatalf("settingsResetCmd failed: %v", err)
+	}
+
+	// 5. Test resolveInstructionsArg
+	argVal, err := resolveInstructionsArg("plain text")
+	if err != nil || argVal != "plain text" {
+		t.Fatalf("expected plain text, got %q err=%v", argVal, err)
+	}
+
+	r, w, err := os.Pipe()
+	if err == nil {
+		_, _ = w.Write([]byte("from stdin"))
+		_ = w.Close()
+		oldStdin := os.Stdin
+		os.Stdin = r
+		stdinVal, stdinErr := resolveInstructionsArg("-")
+		os.Stdin = oldStdin
+		_ = r.Close()
+		if stdinErr != nil || stdinVal != "from stdin" {
+			t.Fatalf("expected from stdin, got %q err=%v", stdinVal, stdinErr)
+		}
+	}
+
+	// 6. Test with running HTTP server (daemon mode)
+	st, err := store.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	router := chi.NewRouter()
+	h := server.NewAPIHandler(st)
+	h.RegisterRoutes(router)
+	ts := httptest.NewServer(router)
+	defer ts.Close()
+
+	flagAPIURL = ts.URL
+
+	if err := settingsGetCmd.RunE(settingsGetCmd, []string{}); err != nil {
+		t.Fatalf("settingsGetCmd via HTTP failed: %v", err)
+	}
+	if err := settingsSetCmd.RunE(settingsSetCmd, []string{"daemon instructions"}); err != nil {
+		t.Fatalf("settingsSetCmd via HTTP failed: %v", err)
+	}
+	if err := settingsGetCmd.RunE(settingsGetCmd, []string{}); err != nil {
+		t.Fatalf("settingsGetCmd via HTTP after set failed: %v", err)
+	}
+	if err := settingsResetCmd.RunE(settingsResetCmd, []string{}); err != nil {
+		t.Fatalf("settingsResetCmd via HTTP failed: %v", err)
 	}
 }

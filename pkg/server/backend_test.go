@@ -94,6 +94,20 @@ func TestStoreBackend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeleteProject failed: %v", err)
 	}
+
+	// 8. Settings
+	inst, err := be.GetSettings()
+	if err != nil || inst != "" {
+		t.Fatalf("expected empty settings, got %q err=%v", inst, err)
+	}
+	err = be.UpdateSettings("test instructions")
+	if err != nil {
+		t.Fatalf("UpdateSettings failed: %v", err)
+	}
+	inst, err = be.GetSettings()
+	if err != nil || inst != "test instructions" {
+		t.Fatalf("expected test instructions, got %q err=%v", inst, err)
+	}
 }
 
 // TestClientBackend exercises all clientBackend methods, which proxy calls to a
@@ -193,5 +207,19 @@ func TestClientBackend(t *testing.T) {
 	err = be.DeleteProject("cb-proj")
 	if err != nil {
 		t.Fatalf("DeleteProject via clientBackend failed: %v", err)
+	}
+
+	// Settings via clientBackend
+	inst, err := be.GetSettings()
+	if err != nil || inst != "" {
+		t.Fatalf("expected empty settings via clientBackend, got %q err=%v", inst, err)
+	}
+	err = be.UpdateSettings("proxy instructions")
+	if err != nil {
+		t.Fatalf("UpdateSettings via clientBackend failed: %v", err)
+	}
+	inst, err = be.GetSettings()
+	if err != nil || inst != "proxy instructions" {
+		t.Fatalf("expected proxy instructions, got %q err=%v", inst, err)
 	}
 }

@@ -89,12 +89,12 @@ func BuildInstructions(userInstructions string) string {
 var BacklogInstructions = BuildInstructions("")
 
 func NewMCPServer(st *store.Store) *server.MCPServer {
-	instructions := BuildInstructions(st.GetMCPUserInstructions())
-	return newMCPServerWithInstructions(NewStoreBackend(st), instructions)
+	return NewMCPServerWithBackend(NewStoreBackend(st))
 }
 
 func NewMCPServerWithBackend(be Backend) *server.MCPServer {
-	return newMCPServerWithInstructions(be, BuildInstructions(""))
+	userInst, _ := be.GetSettings()
+	return newMCPServerWithInstructions(be, BuildInstructions(userInst))
 }
 
 func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPServer {
@@ -109,11 +109,15 @@ func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPSe
 	s.AddResource(
 		mcp.NewResource("backlog://workflow", "Backlog AI Workflow Guidelines", mcp.WithMIMEType("text/markdown")),
 		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			currentInst := instructions
+			if userInst, err := be.GetSettings(); err == nil {
+				currentInst = BuildInstructions(userInst)
+			}
 			return []mcp.ResourceContents{
 				mcp.TextResourceContents{
 					URI:      "backlog://workflow",
 					MIMEType: "text/markdown",
-					Text:     instructions,
+					Text:     currentInst,
 				},
 			}, nil
 		},
@@ -665,6 +669,73 @@ func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPSe
 			}
 
 			return mcp.NewToolResultText(fmt.Sprintf("✔ Task #%s deleted from '%s'", taskID, project)), nil
+		},
+	)
+
+	// Tool: get_settings
+	s.AddTool(
+		mcp.NewTool(
+			"get_settings",
+			mcp.WithDescription("Retrieve current Backlog settings, including immutable core instructions, customizable user instructions, and effective prompt."),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			custom, err := be.GetSettings()
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			isDefault := strings.TrimSpace(custom) == ""
+			effectiveCustom := custom
+			if isDefault {
+				effectiveCustom = strings.TrimSpace(BacklogDefaultUserInstructions)
+			}
+
+			res := map[string]any{
+				"core_instructions":      BacklogCoreInstructions,
+				"custom_instructions":    custom,
+				"using_default":          isDefault,
+				"default_instructions":   strings.TrimSpace(BacklogDefaultUserInstructions),
+				"effective_instructions": BacklogCoreInstructions + "\n" + effectiveCustom,
+			}
+			data, _ := json.MarshalIndent(res, "", "  ")
+			return mcp.NewToolResultText(string(data)), nil
+		},
+	)
+
+	// Tool: update_settings
+	s.AddTool(
+		mcp.NewTool(
+			"update_settings",
+			mcp.WithDescription("Update customizable Backlog settings (e.g. user instructions, testing methodology, team conventions). The core Backlog protocol is immutable and cannot be changed."),
+			mcp.WithString("mcp_user_instructions", mcp.Description("Custom instructions text to append after the core protocol.")),
+			mcp.WithString("instructions", mcp.Description("Alias for mcp_user_instructions.")),
+			mcp.WithBoolean("reset_to_default", mcp.Description("If true, resets custom instructions to the built-in default.")),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			reset := false
+			if rawArgs := req.GetArguments(); rawArgs != nil {
+				if rVal, ok := rawArgs["reset_to_default"].(bool); ok {
+					reset = rVal
+				}
+			}
+			text := req.GetString("mcp_user_instructions", "")
+			if text == "" {
+				text = req.GetString("instructions", "")
+			}
+
+			if reset || strings.TrimSpace(text) == "default" {
+				text = ""
+			}
+
+			if err := be.UpdateSettings(text); err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			msg := "✔ Settings updated successfully. Custom instructions will take effect on next MCP connection."
+			if text == "" {
+				msg = "✔ Settings reset to default. Built-in instructions will take effect on next MCP connection."
+			}
+			return mcp.NewToolResultText(msg), nil
 		},
 	)
 

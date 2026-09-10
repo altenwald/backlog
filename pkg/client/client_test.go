@@ -176,3 +176,45 @@ func TestClientEndToEnd(t *testing.T) {
 		t.Fatalf("DeleteProject failed: %v", err)
 	}
 }
+
+func TestClientSettings(t *testing.T) {
+	c, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// 1. Initial settings should be empty
+	s, err := c.GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings failed: %v", err)
+	}
+	if s.MCPUserInstructions != "" {
+		t.Fatalf("expected empty initial instructions, got %q", s.MCPUserInstructions)
+	}
+
+	// 2. Update settings
+	custom := "6. CUSTOM RULE: write thorough tests."
+	updated, err := c.UpdateSettings(client.SettingsInfo{MCPUserInstructions: custom})
+	if err != nil {
+		t.Fatalf("UpdateSettings failed: %v", err)
+	}
+	if updated.MCPUserInstructions != custom {
+		t.Fatalf("expected %q, got %q", custom, updated.MCPUserInstructions)
+	}
+
+	// 3. Get settings again
+	s2, err := c.GetSettings()
+	if err != nil {
+		t.Fatalf("GetSettings after update failed: %v", err)
+	}
+	if s2.MCPUserInstructions != custom {
+		t.Fatalf("expected %q, got %q", custom, s2.MCPUserInstructions)
+	}
+
+	// 4. Reset settings (empty string)
+	reset, err := c.UpdateSettings(client.SettingsInfo{MCPUserInstructions: ""})
+	if err != nil {
+		t.Fatalf("UpdateSettings reset failed: %v", err)
+	}
+	if reset.MCPUserInstructions != "" {
+		t.Fatalf("expected empty instructions after reset, got %q", reset.MCPUserInstructions)
+	}
+}

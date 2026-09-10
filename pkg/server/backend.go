@@ -26,6 +26,8 @@ type Backend interface {
 	AssignTask(slug string, taskID string, assignee string) (*model.Task, error)
 	DeleteTask(slug string, taskID string) error
 	DeleteProject(slug string) error
+	GetSettings() (string, error)
+	UpdateSettings(mcpUserInstructions string) error
 }
 
 // storeBackend adapts *store.Store to Backend
@@ -101,6 +103,14 @@ func (b *storeBackend) DeleteProject(slug string) error {
 	return b.st.DeleteProject(slug)
 }
 
+func (b *storeBackend) GetSettings() (string, error) {
+	return b.st.GetMCPUserInstructions(), nil
+}
+
+func (b *storeBackend) UpdateSettings(instructions string) error {
+	return b.st.SaveMCPUserInstructions(instructions)
+}
+
 // clientBackend adapts *client.Client to Backend
 type clientBackend struct {
 	c *client.Client
@@ -174,4 +184,19 @@ func (b *clientBackend) DeleteTask(slug string, taskID string) error {
 
 func (b *clientBackend) DeleteProject(slug string) error {
 	return b.c.DeleteProject(slug)
+}
+
+func (b *clientBackend) GetSettings() (string, error) {
+	s, err := b.c.GetSettings()
+	if err != nil {
+		return "", err
+	}
+	return s.MCPUserInstructions, nil
+}
+
+func (b *clientBackend) UpdateSettings(instructions string) error {
+	_, err := b.c.UpdateSettings(client.SettingsInfo{
+		MCPUserInstructions: instructions,
+	})
+	return err
 }

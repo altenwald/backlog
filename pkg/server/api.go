@@ -42,6 +42,10 @@ func (h *APIHandler) RegisterRoutes(r chi.Router) {
 			r.Delete("/tasks/{id}", h.deleteTask)
 			r.Delete("/", h.deleteProject)
 		})
+
+		// Settings
+		r.Get("/settings", h.getSettings)
+		r.Put("/settings", h.updateSettings)
 	})
 }
 
@@ -295,4 +299,29 @@ func (h *APIHandler) deleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "task deleted"})
+}
+
+type settingsPayload struct {
+	MCPUserInstructions string `json:"mcp_user_instructions"`
+}
+
+func (h *APIHandler) getSettings(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, settingsPayload{
+		MCPUserInstructions: h.store.GetMCPUserInstructions(),
+	})
+}
+
+func (h *APIHandler) updateSettings(w http.ResponseWriter, r *http.Request) {
+	var body settingsPayload
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		errorResponse(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := h.store.SaveMCPUserInstructions(body.MCPUserInstructions); err != nil {
+		errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, settingsPayload{
+		MCPUserInstructions: h.store.GetMCPUserInstructions(),
+	})
 }
