@@ -38,9 +38,12 @@ func (h *APIHandler) RegisterRoutes(r chi.Router) {
 			r.Get("/tasks/{id}", h.getTask)
 			r.Put("/tasks/{id}", h.updateTask)
 			r.Post("/tasks/{id}/done", h.completeTask)
+			r.Post("/tasks/{id}/deprecate", h.deprecateTask)
 			r.Post("/tasks/{id}/assign", h.assignTask)
 			r.Delete("/tasks/{id}", h.deleteTask)
 			r.Delete("/", h.deleteProject)
+			r.Get("/spec", h.getProjectSpec)
+			r.Put("/spec", h.updateProjectSpec)
 		})
 
 		// Settings
@@ -324,4 +327,54 @@ func (h *APIHandler) updateSettings(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, settingsPayload{
 		MCPUserInstructions: h.store.GetMCPUserInstructions(),
 	})
+}
+
+type deprecateTaskRequest struct {
+	Deprecated *bool `json:"deprecated"`
+}
+
+func (h *APIHandler) deprecateTask(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	id := chi.URLParam(r, "id")
+
+	deprecated := true
+	var body deprecateTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err == nil && body.Deprecated != nil {
+		deprecated = *body.Deprecated
+	}
+
+	task, err := h.store.DeprecateTask(slug, id, deprecated)
+	if err != nil {
+		errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, task)
+}
+
+type projectSpecPayload struct {
+	Specification string `json:"specification"`
+}
+
+func (h *APIHandler) getProjectSpec(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	p, err := h.store.GetProject(slug)
+	if err != nil {
+		errorResponse(w, http.StatusNotFound, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, projectSpecPayload{Specification: p.Specification})
+}
+
+func (h *APIHandler) updateProjectSpec(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	var body projectSpecPayload
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		errorResponse(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := h.store.UpdateProjectSpecification(slug, body.Specification); err != nil {
+		errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, projectSpecPayload{Specification: body.Specification})
 }

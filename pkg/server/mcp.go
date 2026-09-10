@@ -739,5 +739,102 @@ func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPSe
 		},
 	)
 
+	// Tool: deprecate_task
+	s.AddTool(
+		mcp.NewTool(
+			"deprecate_task",
+			mcp.WithDescription("Mark a task as deprecated (and completed) because it is no longer applicable based on the composite project specification."),
+			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
+			mcp.WithString("task_id", mcp.Description("ID of task to deprecate (required)"), mcp.Required()),
+			mcp.WithBoolean("deprecated", mcp.Description("True to deprecate (default), false to undeprecate")),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			project := strings.TrimSpace(req.GetString("project", ""))
+			if project == "" {
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
+			}
+
+			taskID := req.GetString("task_id", "")
+			if taskID == "" {
+				if rawArgs := req.GetArguments(); rawArgs != nil {
+					if v, ok := rawArgs["task_id"].(float64); ok {
+						taskID = strconv.Itoa(int(v))
+					}
+				}
+			}
+			if taskID == "" {
+				return mcp.NewToolResultError("parameter 'task_id' is required"), nil
+			}
+
+			deprecated := true
+			if rawArgs := req.GetArguments(); rawArgs != nil {
+				if dVal, ok := rawArgs["deprecated"].(bool); ok {
+					deprecated = dVal
+				}
+			}
+
+			task, err := be.DeprecateTask(project, taskID, deprecated)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			statusMsg := "deprecated"
+			if !task.Deprecated {
+				statusMsg = "undeprecated"
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Task #%s in '%s' is now %s", task.ID, project, statusMsg)), nil
+		},
+	)
+
+	// Tool: get_project_spec
+	s.AddTool(
+		mcp.NewTool(
+			"get_project_spec",
+			mcp.WithDescription("Get the composite project specification / definition document for a project."),
+			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			project := strings.TrimSpace(req.GetString("project", ""))
+			if project == "" {
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
+			}
+
+			spec, err := be.GetProjectSpecification(project)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			res := map[string]string{
+				"project":       project,
+				"specification": spec,
+			}
+			data, _ := json.MarshalIndent(res, "", "  ")
+			return mcp.NewToolResultText(string(data)), nil
+		},
+	)
+
+	// Tool: update_project_spec
+	s.AddTool(
+		mcp.NewTool(
+			"update_project_spec",
+			mcp.WithDescription("Update the composite project specification / definition document for a project (describing all project scope and referencing ticket IDs)."),
+			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
+			mcp.WithString("specification", mcp.Description("Markdown content of the composite project specification"), mcp.Required()),
+		),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			project := strings.TrimSpace(req.GetString("project", ""))
+			if project == "" {
+				return mcp.NewToolResultError("parameter 'project' is required"), nil
+			}
+
+			spec := req.GetString("specification", "")
+			if err := be.UpdateProjectSpecification(project, spec); err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Project specification for '%s' updated successfully.", project)), nil
+		},
+	)
+
 	return s
 }

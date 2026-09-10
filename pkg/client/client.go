@@ -39,10 +39,11 @@ func (c *Client) IsServerRunning() bool {
 }
 
 type ProjectInfo struct {
-	Slug        string         `json:"slug"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Summary     *model.Summary `json:"summary"`
+	Slug          string         `json:"slug"`
+	Name          string         `json:"name"`
+	Description   string         `json:"description"`
+	Specification string         `json:"specification,omitempty"`
+	Summary       *model.Summary `json:"summary"`
 }
 
 func (c *Client) ListProjects() ([]ProjectInfo, error) {
@@ -353,4 +354,77 @@ func (c *Client) UpdateSettings(s SettingsInfo) (*SettingsInfo, error) {
 	var updated SettingsInfo
 	err = json.NewDecoder(resp.Body).Decode(&updated)
 	return &updated, err
+}
+
+// DeprecateTask marks a task as deprecated (or undeprecates it).
+func (c *Client) DeprecateTask(projectSlug, taskID string, deprecated bool) (*model.Task, error) {
+	u := fmt.Sprintf("%s/api/projects/%s/tasks/%s/deprecate", c.baseURL, url.PathEscape(projectSlug), url.PathEscape(taskID))
+	payload := map[string]bool{"deprecated": deprecated}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Post(u, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error: %s", resp.Status)
+	}
+
+	var updated model.Task
+	err = json.NewDecoder(resp.Body).Decode(&updated)
+	return &updated, err
+}
+
+// GetProjectSpecification retrieves the composite specification document for a project.
+func (c *Client) GetProjectSpecification(projectSlug string) (string, error) {
+	u := fmt.Sprintf("%s/api/projects/%s/spec", c.baseURL, url.PathEscape(projectSlug))
+	resp, err := c.httpClient.Get(u)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("server error: %s", resp.Status)
+	}
+
+	var payload struct {
+		Specification string `json:"specification"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", err
+	}
+	return payload.Specification, nil
+}
+
+// UpdateProjectSpecification updates the composite specification document for a project.
+func (c *Client) UpdateProjectSpecification(projectSlug, spec string) error {
+	u := fmt.Sprintf("%s/api/projects/%s/spec", c.baseURL, url.PathEscape(projectSlug))
+	payload := map[string]string{"specification": spec}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, u, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server error: %s", resp.Status)
+	}
+	return nil
 }

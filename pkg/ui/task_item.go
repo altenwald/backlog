@@ -102,7 +102,11 @@ func (item *TaskRowItem) Bind(task model.Task) {
 	if len(task.DependsOn) > 0 {
 		depInfo = " [⛔ #" + strings.Join(task.DependsOn, ", #") + "]"
 	}
-	displayTitle := prefix + "#" + task.ID + "  " + task.Title + depInfo
+	deprInfo := ""
+	if task.Deprecated {
+		deprInfo = " ⚠️ [Deprecated]"
+	}
+	displayTitle := prefix + "#" + task.ID + "  " + task.Title + depInfo + deprInfo
 	if task.Done {
 		item.title.TextStyle = fyne.TextStyle{Italic: true}
 	} else {

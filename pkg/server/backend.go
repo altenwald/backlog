@@ -26,6 +26,9 @@ type Backend interface {
 	AssignTask(slug string, taskID string, assignee string) (*model.Task, error)
 	DeleteTask(slug string, taskID string) error
 	DeleteProject(slug string) error
+	DeprecateTask(slug string, taskID string, deprecated bool) (*model.Task, error)
+	GetProjectSpecification(slug string) (string, error)
+	UpdateProjectSpecification(slug string, spec string) error
 	GetSettings() (string, error)
 	UpdateSettings(mcpUserInstructions string) error
 }
@@ -101,6 +104,22 @@ func (b *storeBackend) DeleteTask(slug string, taskID string) error {
 
 func (b *storeBackend) DeleteProject(slug string) error {
 	return b.st.DeleteProject(slug)
+}
+
+func (b *storeBackend) DeprecateTask(slug string, taskID string, deprecated bool) (*model.Task, error) {
+	return b.st.DeprecateTask(slug, taskID, deprecated)
+}
+
+func (b *storeBackend) GetProjectSpecification(slug string) (string, error) {
+	p, err := b.st.GetProject(slug)
+	if err != nil {
+		return "", err
+	}
+	return p.Specification, nil
+}
+
+func (b *storeBackend) UpdateProjectSpecification(slug string, spec string) error {
+	return b.st.UpdateProjectSpecification(slug, spec)
 }
 
 func (b *storeBackend) GetSettings() (string, error) {
@@ -184,6 +203,18 @@ func (b *clientBackend) DeleteTask(slug string, taskID string) error {
 
 func (b *clientBackend) DeleteProject(slug string) error {
 	return b.c.DeleteProject(slug)
+}
+
+func (b *clientBackend) DeprecateTask(slug string, taskID string, deprecated bool) (*model.Task, error) {
+	return b.c.DeprecateTask(slug, taskID, deprecated)
+}
+
+func (b *clientBackend) GetProjectSpecification(slug string) (string, error) {
+	return b.c.GetProjectSpecification(slug)
+}
+
+func (b *clientBackend) UpdateProjectSpecification(slug string, spec string) error {
+	return b.c.UpdateProjectSpecification(slug, spec)
 }
 
 func (b *clientBackend) GetSettings() (string, error) {

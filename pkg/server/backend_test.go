@@ -108,6 +108,28 @@ func TestStoreBackend(t *testing.T) {
 	if err != nil || inst != "test instructions" {
 		t.Fatalf("expected test instructions, got %q err=%v", inst, err)
 	}
+
+	// 9. Deprecate and Specification
+	_, err = be.CreateProject("spec-store-proj", "Spec Proj", "")
+	if err != nil {
+		t.Fatalf("CreateProject failed: %v", err)
+	}
+	tStore, err := be.AddTask("spec-store-proj", model.Task{Title: "T1", Tier: model.Tier2, Size: model.SizeS})
+	if err != nil {
+		t.Fatalf("AddTask failed: %v", err)
+	}
+	depT, err := be.DeprecateTask("spec-store-proj", tStore.ID, true)
+	if err != nil || !depT.Deprecated || !depT.Done {
+		t.Fatalf("expected task deprecated, got %+v err=%v", depT, err)
+	}
+	err = be.UpdateProjectSpecification("spec-store-proj", "# Store Spec")
+	if err != nil {
+		t.Fatalf("UpdateProjectSpecification failed: %v", err)
+	}
+	spec, err := be.GetProjectSpecification("spec-store-proj")
+	if err != nil || spec != "# Store Spec" {
+		t.Fatalf("expected # Store Spec, got %q err=%v", spec, err)
+	}
 }
 
 // TestClientBackend exercises all clientBackend methods, which proxy calls to a
@@ -221,5 +243,27 @@ func TestClientBackend(t *testing.T) {
 	inst, err = be.GetSettings()
 	if err != nil || inst != "proxy instructions" {
 		t.Fatalf("expected proxy instructions, got %q err=%v", inst, err)
+	}
+
+	// Deprecate & Specification via clientBackend
+	_, err = be.CreateProject("spec-client-proj", "Spec Client Proj", "")
+	if err != nil {
+		t.Fatalf("CreateProject via clientBackend failed: %v", err)
+	}
+	tClient, err := be.AddTask("spec-client-proj", model.Task{Title: "T2", Tier: model.Tier1, Size: model.SizeM})
+	if err != nil {
+		t.Fatalf("AddTask via clientBackend failed: %v", err)
+	}
+	depTC, err := be.DeprecateTask("spec-client-proj", tClient.ID, true)
+	if err != nil || !depTC.Deprecated || !depTC.Done {
+		t.Fatalf("expected task deprecated via clientBackend, got %+v err=%v", depTC, err)
+	}
+	err = be.UpdateProjectSpecification("spec-client-proj", "# Client Spec")
+	if err != nil {
+		t.Fatalf("UpdateProjectSpecification via clientBackend failed: %v", err)
+	}
+	specC, err := be.GetProjectSpecification("spec-client-proj")
+	if err != nil || specC != "# Client Spec" {
+		t.Fatalf("expected # Client Spec, got %q err=%v", specC, err)
 	}
 }

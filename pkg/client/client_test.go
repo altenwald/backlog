@@ -218,3 +218,56 @@ func TestClientSettings(t *testing.T) {
 		t.Fatalf("expected empty instructions after reset, got %q", reset.MCPUserInstructions)
 	}
 }
+
+func TestClientDeprecateAndSpec(t *testing.T) {
+	c, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	_, err := c.CreateProject("deprecate-client", "Deprecate Client", "Desc")
+	if err != nil {
+		t.Fatalf("CreateProject failed: %v", err)
+	}
+
+	task, err := c.AddTask("deprecate-client", model.Task{
+		Title: "Task for deprecation",
+		Size:  model.SizeM,
+		Tier:  model.Tier2,
+	})
+	if err != nil {
+		t.Fatalf("AddTask failed: %v", err)
+	}
+
+	// 1. Deprecate task
+	depTask, err := c.DeprecateTask("deprecate-client", task.ID, true)
+	if err != nil {
+		t.Fatalf("DeprecateTask failed: %v", err)
+	}
+	if !depTask.Deprecated || !depTask.Done {
+		t.Fatalf("expected task deprecated=true done=true, got deprecated=%v done=%v", depTask.Deprecated, depTask.Done)
+	}
+
+	// 2. Undeprecate task
+	undepTask, err := c.DeprecateTask("deprecate-client", task.ID, false)
+	if err != nil {
+		t.Fatalf("Undeprecate failed: %v", err)
+	}
+	if undepTask.Deprecated {
+		t.Fatal("expected task deprecated=false")
+	}
+
+	// 3. Specification
+	spec, err := c.GetProjectSpecification("deprecate-client")
+	if err != nil || spec != "" {
+		t.Fatalf("expected empty initial spec, got %q err=%v", spec, err)
+	}
+
+	testSpec := "# Client Spec\n\nReference to #1"
+	if err := c.UpdateProjectSpecification("deprecate-client", testSpec); err != nil {
+		t.Fatalf("UpdateProjectSpecification failed: %v", err)
+	}
+
+	specAfter, err := c.GetProjectSpecification("deprecate-client")
+	if err != nil || specAfter != testSpec {
+		t.Fatalf("expected spec %q, got %q err=%v", testSpec, specAfter, err)
+	}
+}

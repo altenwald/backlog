@@ -86,6 +86,7 @@ type Task struct {
 	Size         Size       `json:"size"`
 	Tier         Tier       `json:"tier"`
 	Done         bool       `json:"done"`
+	Deprecated   bool       `json:"deprecated,omitempty"`
 	Assignee     string     `json:"assignee,omitempty"`   // e.g. "claude", "antigravity", "manuel"
 	Resolution   string     `json:"resolution,omitempty"` // Summary of implementation details and resolution
 	InsertedAt   time.Time  `json:"inserted_at"`
@@ -136,12 +137,13 @@ func (t *Task) UnmarshalJSON(data []byte) error {
 }
 
 type Project struct {
-	Slug        string    `json:"slug"` // e.g. "my-project"
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Tasks       []Task    `json:"tasks"`
-	InsertedAt  time.Time `json:"inserted_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	Slug          string    `json:"slug"` // e.g. "my-project"
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	Specification string    `json:"specification,omitempty"` // Composite project definition & tickets reference
+	Tasks         []Task    `json:"tasks"`
+	InsertedAt    time.Time `json:"inserted_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 func (p *Project) UnmarshalJSON(data []byte) error {
@@ -162,14 +164,15 @@ func (p *Project) UnmarshalJSON(data []byte) error {
 }
 
 type TaskFilter struct {
-	Tier      *Tier   `json:"tier,omitempty"`
-	ParentID  *string `json:"parent_id,omitempty"`
-	DependsOn *string `json:"depends_on,omitempty"`
-	Blocked   *bool   `json:"blocked,omitempty"`
-	Size      *Size   `json:"size,omitempty"`
-	Done      *bool   `json:"done,omitempty"`
-	Assignee  *string `json:"assignee,omitempty"`
-	Search    string  `json:"search,omitempty"`
+	Tier       *Tier   `json:"tier,omitempty"`
+	ParentID   *string `json:"parent_id,omitempty"`
+	DependsOn  *string `json:"depends_on,omitempty"`
+	Blocked    *bool   `json:"blocked,omitempty"`
+	Size       *Size   `json:"size,omitempty"`
+	Done       *bool   `json:"done,omitempty"`
+	Deprecated *bool   `json:"deprecated,omitempty"`
+	Assignee   *string `json:"assignee,omitempty"`
+	Search     string  `json:"search,omitempty"`
 }
 
 type Summary struct {

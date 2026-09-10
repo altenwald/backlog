@@ -373,3 +373,51 @@ func TestMCPSettingsTools(t *testing.T) {
 		t.Fatalf("expected empty custom instructions in store, got %q", st.GetMCPUserInstructions())
 	}
 }
+
+func TestMCPDeprecateAndSpecTools(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "backlog-mcp-dep-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	st, err := store.NewStore(tempDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _ = st.CreateProject("specproj", "Spec Proj", "Desc")
+	task, _ := st.AddTask("specproj", model.Task{Title: "Task to deprecate via MCP", Tier: model.Tier2, Size: model.SizeS})
+
+	srv := NewMCPServer(st)
+
+	// 1. deprecate_task tool
+	depMsg := []byte(`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"deprecate_task","arguments":{"project":"specproj","task_id":"` + task.ID + `","deprecated":true}}}`)
+	depResp := srv.HandleMessage(context.Background(), depMsg)
+	depRespBytes, _ := json.Marshal(depResp)
+	if !strings.Contains(string(depRespBytes), "is now deprecated") {
+		t.Fatalf("expected deprecated message, got %s", string(depRespBytes))
+	}
+
+	// Verify task in store
+	tasks, _ := st.ListTasks("specproj", model.TaskFilter{})
+	if len(tasks) != 1 || !tasks[0].Deprecated || !tasks[0].Done {
+		t.Fatalf("expected task deprecated in store, got %+v", tasks)
+	}
+
+	// 2. update_project_spec tool
+	updateSpecMsg := []byte(`{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"update_project_spec","arguments":{"project":"specproj","specification":"# Composite Spec\nReferences #1"}}}`)
+	updateSpecResp := srv.HandleMessage(context.Background(), updateSpecMsg)
+	updateSpecRespBytes, _ := json.Marshal(updateSpecResp)
+	if !strings.Contains(string(updateSpecRespBytes), "updated successfully") {
+		t.Fatalf("expected spec updated, got %s", string(updateSpecRespBytes))
+	}
+
+	// 3. get_project_spec tool
+	getSpecMsg := []byte(`{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"get_project_spec","arguments":{"project":"specproj"}}}`)
+	getSpecResp := srv.HandleMessage(context.Background(), getSpecMsg)
+	getSpecRespBytes, _ := json.Marshal(getSpecResp)
+	if !strings.Contains(string(getSpecRespBytes), "Composite Spec") {
+		t.Fatalf("expected get_project_spec to contain Composite Spec, got %s", string(getSpecRespBytes))
+	}
+}

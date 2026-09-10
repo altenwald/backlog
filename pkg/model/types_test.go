@@ -122,3 +122,40 @@ func TestLegacyProjectUnmarshalJSON(t *testing.T) {
 		t.Fatalf("expected InsertedAt to map from created_at: got %v, expected %v", proj.InsertedAt, now)
 	}
 }
+
+func TestTaskDeprecatedAndSpecification(t *testing.T) {
+	task := model.Task{
+		ID:         "10",
+		Title:      "Deprecated Task",
+		Done:       true,
+		Deprecated: true,
+	}
+	data, err := json.Marshal(task)
+	if err != nil {
+		t.Fatalf("Marshal task failed: %v", err)
+	}
+	var unmarshaledTask model.Task
+	if err := json.Unmarshal(data, &unmarshaledTask); err != nil {
+		t.Fatalf("Unmarshal task failed: %v", err)
+	}
+	if !unmarshaledTask.Deprecated || !unmarshaledTask.Done {
+		t.Fatalf("expected Deprecated and Done to be true, got deprecated=%v done=%v", unmarshaledTask.Deprecated, unmarshaledTask.Done)
+	}
+
+	proj := model.Project{
+		Slug:          "spec-proj",
+		Name:          "Spec Project",
+		Specification: "Composite project definition referencing #10",
+	}
+	projData, err := json.Marshal(proj)
+	if err != nil {
+		t.Fatalf("Marshal proj failed: %v", err)
+	}
+	var unmarshaledProj model.Project
+	if err := json.Unmarshal(projData, &unmarshaledProj); err != nil {
+		t.Fatalf("Unmarshal proj failed: %v", err)
+	}
+	if unmarshaledProj.Specification != proj.Specification {
+		t.Fatalf("expected Specification %q, got %q", proj.Specification, unmarshaledProj.Specification)
+	}
+}

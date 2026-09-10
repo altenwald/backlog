@@ -477,3 +477,100 @@ func TestMCPUserInstructions(t *testing.T) {
 		t.Fatalf("expected empty after clear, got: %q", got)
 	}
 }
+
+func TestDeprecateTask(t *testing.T) {
+	st, tmpDir := setupTestStore(t)
+	defer os.RemoveAll(tmpDir)
+
+	projSlug := "deprecate-test"
+	_, err := st.CreateProject(projSlug, "Deprecate Test", "Testing deprecation")
+	if err != nil {
+		t.Fatalf("CreateProject failed: %v", err)
+	}
+
+	task, err := st.AddTask(projSlug, model.Task{
+		Title: "Task to Deprecate",
+		Size:  model.SizeM,
+		Tier:  model.Tier2,
+	})
+	if err != nil {
+		t.Fatalf("AddTask failed: %v", err)
+	}
+
+	// 1. Deprecate the task
+	depTask, err := st.DeprecateTask(projSlug, task.ID, true)
+	if err != nil {
+		t.Fatalf("DeprecateTask failed: %v", err)
+	}
+	if !depTask.Deprecated || !depTask.Done {
+		t.Fatalf("expected task to be deprecated and done, got deprecated=%v done=%v", depTask.Deprecated, depTask.Done)
+	}
+	if depTask.TerminatedAt == nil {
+		t.Fatal("expected TerminatedAt to be set when deprecated")
+	}
+
+	// 2. Filter by Deprecated
+	trueVal := true
+	falseVal := false
+	depList, err := st.ListTasks(projSlug, model.TaskFilter{Deprecated: &trueVal})
+	if err != nil || len(depList) != 1 {
+		t.Fatalf("expected 1 deprecated task, got %d err=%v", len(depList), err)
+	}
+	activeList, err := st.ListTasks(projSlug, model.TaskFilter{Deprecated: &falseVal})
+	if err != nil || len(activeList) != 0 {
+		t.Fatalf("expected 0 non-deprecated tasks, got %d err=%v", len(activeList), err)
+	}
+
+	// 3. Reopen the task clears deprecation
+	reopened, err := st.CompleteTask(projSlug, task.ID, false)
+	if err != nil {
+		t.Fatalf("CompleteTask reopen failed: %v", err)
+	}
+	if reopened.Done || reopened.Deprecated {
+		t.Fatalf("reopened task should not be done or deprecated, got done=%v deprecated=%v", reopened.Done, reopened.Deprecated)
+	}
+
+	// 4. Undeprecate explicitly
+	_, _ = st.DeprecateTask(projSlug, task.ID, true)
+	undep, err := st.DeprecateTask(projSlug, task.ID, false)
+	if err != nil {
+		t.Fatalf("Undeprecate failed: %v", err)
+	}
+	if undep.Deprecated {
+		t.Fatal("expected task not to be deprecated after undeprecate")
+	}
+}
+
+func TestUpdateProjectSpecification(t *testing.T) {
+	st, tmpDir := setupTestStore(t)
+	defer os.RemoveAll(tmpDir)
+
+	projSlug := "spec-test"
+	_, err := st.CreateProject(projSlug, "Spec Test", "Testing spec")
+	if err != nil {
+		t.Fatalf("CreateProject failed: %v", err)
+	}
+
+	specContent := "# Project Specification\n\n- Scope includes #1 and #2.\n- #3 is out of scope."
+	if err := st.UpdateProjectSpecification(projSlug, specContent); err != nil {
+		t.Fatalf("UpdateProjectSpecification failed: %v", err)
+	}
+
+	p, err := st.GetProject(projSlug)
+	if err != nil {
+		t.Fatalf("GetProject failed: %v", err)
+	}
+	if p.Specification != specContent {
+		t.Fatalf("expected spec %q, got %q", specContent, p.Specification)
+	}
+
+	// Verify persistence
+	st2, err := store.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to reload store: %v", err)
+	}
+	p2, err := st2.GetProject(projSlug)
+	if err != nil || p2.Specification != specContent {
+		t.Fatalf("reloaded project spec mismatch: %v / %+v", err, p2)
+	}
+}

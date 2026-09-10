@@ -18,6 +18,7 @@ type TaskDetailCallbacks struct {
 	OnToggleDone func(taskID string, done bool)
 	OnEdit       func(task model.Task)
 	OnDelete     func(taskID string)
+	OnDeprecate  func(taskID string, deprecated bool)
 }
 
 type TaskDetailView struct {
@@ -27,6 +28,7 @@ type TaskDetailView struct {
 
 	titleLabel    *widget.Label
 	toggleDoneBtn *widget.Button
+	deprecateBtn  *widget.Button
 	editBtn       *widget.Button
 	deleteBtn     *widget.Button
 
@@ -62,6 +64,13 @@ func NewTaskDetailView(callbacks TaskDetailCallbacks) *TaskDetailView {
 		}
 	})
 
+	dv.deprecateBtn = widget.NewButtonWithIcon("Deprecate", theme.WarningIcon(), func() {
+		if dv.currentTask != nil && dv.callbacks.OnDeprecate != nil {
+			dv.callbacks.OnDeprecate(dv.currentTask.ID, !dv.currentTask.Deprecated)
+		}
+	})
+	dv.deprecateBtn.Importance = widget.WarningImportance
+
 	dv.editBtn = widget.NewButtonWithIcon("Edit", theme.DocumentCreateIcon(), func() {
 		if dv.currentTask != nil && dv.callbacks.OnEdit != nil {
 			dv.callbacks.OnEdit(*dv.currentTask)
@@ -76,7 +85,7 @@ func NewTaskDetailView(callbacks TaskDetailCallbacks) *TaskDetailView {
 	})
 	dv.deleteBtn.Importance = widget.DangerImportance
 
-	btnBar := container.NewHBox(dv.toggleDoneBtn, dv.editBtn, dv.deleteBtn, layout.NewSpacer())
+	btnBar := container.NewHBox(dv.toggleDoneBtn, dv.deprecateBtn, dv.editBtn, dv.deleteBtn, layout.NewSpacer())
 
 	// Badges row & dates
 	dv.badgesRow = container.NewHBox()
@@ -131,7 +140,7 @@ func (dv *TaskDetailView) ShowTask(task model.Task) {
 	dv.placeholder.Hide()
 	dv.contentWrap.Show()
 
-	// Title
+	// Title & action buttons
 	if task.Done {
 		dv.toggleDoneBtn.SetText("Reopen Task")
 		dv.toggleDoneBtn.SetIcon(theme.ViewRefreshIcon())
@@ -141,10 +150,23 @@ func (dv *TaskDetailView) ShowTask(task model.Task) {
 		dv.toggleDoneBtn.SetIcon(theme.ConfirmIcon())
 		dv.toggleDoneBtn.Importance = widget.HighImportance
 	}
+
+	if task.Deprecated {
+		dv.deprecateBtn.SetText("Undeprecate")
+		dv.deprecateBtn.Importance = widget.LowImportance
+	} else {
+		dv.deprecateBtn.SetText("Deprecate")
+		dv.deprecateBtn.Importance = widget.WarningImportance
+	}
+
 	dv.titleLabel.SetText(fmt.Sprintf("#%s: %s", task.ID, task.Title))
 
 	// Badges
 	dv.badgesRow.Objects = nil
+	if task.Deprecated {
+		deprecateBadge := MakeBadge("⚠️ DEPRECATED", color.NRGBA{R: 220, G: 110, B: 15, A: 255}, color.White)
+		dv.badgesRow.Add(deprecateBadge)
+	}
 	tierBadge := MakeBadge(task.Tier.Label(), TierColor(task.Tier), color.White)
 	sizeBadge := MakeBadge(string(task.Size), SizeColor(task.Size), color.White)
 	dv.badgesRow.Add(tierBadge)

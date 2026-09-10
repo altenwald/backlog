@@ -23,6 +23,7 @@ const (
 	EventTaskCompleted   EventType = "task_completed"
 	EventTaskDeleted     EventType = "task_deleted"
 	EventProjectCreated  EventType = "project_created"
+	EventProjectUpdated  EventType = "project_updated"
 	EventProjectSelected EventType = "project_selected"
 	EventProjectDeleted  EventType = "project_deleted"
 )
@@ -349,6 +350,9 @@ func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.
 		if filter.Done != nil && task.Done != *filter.Done {
 			continue
 		}
+		if filter.Deprecated != nil && task.Deprecated != *filter.Deprecated {
+			continue
+		}
 		if filter.Assignee != nil && *filter.Assignee != "" {
 			reqAssignee := strings.ToLower(strings.TrimPrefix(*filter.Assignee, "@"))
 			taskAssignee := strings.ToLower(strings.TrimPrefix(task.Assignee, "@"))
@@ -564,6 +568,7 @@ func (s *Store) CompleteTask(projectSlug string, taskID string, done bool, resol
 				}
 			} else {
 				p.Tasks[i].TerminatedAt = nil
+				p.Tasks[i].Deprecated = false
 			}
 			p.UpdatedAt = now
 
@@ -848,4 +853,80 @@ func (s *Store) SaveMCPUserInstructions(instructions string) error {
 	defer s.mu.Unlock()
 	s.config.MCPUserInstructions = instructions
 	return s.saveConfig()
+}
+
+// DeprecateTask marks a task as deprecated and completed (or undeprecates it).
+func (s *Store) DeprecateTask(projectSlug string, taskID string, deprecated bool) (*model.Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if projectSlug == "" {
+		projectSlug = s.config.ActiveProject
+	}
+	projectSlug = strings.ToLower(projectSlug)
+
+	p, ok := s.projects[projectSlug]
+	if !ok {
+		return nil, fmt.Errorf("project '%s' not found", projectSlug)
+	}
+
+	for i := range p.Tasks {
+		if p.Tasks[i].ID == taskID {
+			p.Tasks[i].Deprecated = deprecated
+			now := time.Now()
+			p.Tasks[i].UpdatedAt = now
+			if deprecated {
+				p.Tasks[i].Done = true
+				if p.Tasks[i].TerminatedAt == nil {
+					p.Tasks[i].TerminatedAt = &now
+				}
+				if p.Tasks[i].Resolution == "" {
+					p.Tasks[i].Resolution = "Deprecated: no longer applicable according to project specification."
+				}
+			}
+			p.UpdatedAt = now
+
+			if err := s.saveProject(p); err != nil {
+				return nil, err
+			}
+
+			go s.notify(Event{
+				Type:        EventTaskUpdated,
+				ProjectSlug: projectSlug,
+				TaskID:      taskID,
+			})
+			return &p.Tasks[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("task ID '%s' not found in project '%s'", taskID, projectSlug)
+}
+
+// UpdateProjectSpecification updates the composite specification for a project.
+func (s *Store) UpdateProjectSpecification(slug, spec string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if slug == "" {
+		slug = s.config.ActiveProject
+	}
+	slug = strings.ToLower(slug)
+
+	p, ok := s.projects[slug]
+	if !ok {
+		return fmt.Errorf("project '%s' not found", slug)
+	}
+
+	p.Specification = spec
+	p.UpdatedAt = time.Now()
+
+	if err := s.saveProject(p); err != nil {
+		return err
+	}
+
+	go s.notify(Event{
+		Type:        EventProjectUpdated,
+		ProjectSlug: slug,
+	})
+	return nil
 }

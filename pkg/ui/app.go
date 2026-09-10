@@ -30,6 +30,11 @@ type BacklogApp struct {
 	burnUpChart    *BurnUpChart
 	displayedTasks []model.Task
 	selectedTaskID string
+
+	specEntry      *widget.Entry
+	specSaveBtn    *widget.Button
+	specStatus     *widget.Label
+	loadedSpecSlug string
 }
 
 func GetAppIconResource() fyne.Resource {
@@ -88,8 +93,13 @@ func (ba *BacklogApp) buildUI() {
 	// Project selector
 	ba.projectSelect = widget.NewSelect([]string{}, func(selectedName string) {
 		activeSlug := ba.store.GetActiveProjectSlug()
+		// Auto-save specification of previous project if modified
+		if activeSlug != "" && ba.loadedSpecSlug == activeSlug && ba.specEntry != nil {
+			_ = ba.store.UpdateProjectSpecification(activeSlug, ba.specEntry.Text)
+		}
 		for _, p := range ba.store.ListProjects() {
 			if (p.Name == selectedName || p.Slug == selectedName) && p.Slug != activeSlug {
+				ba.loadedSpecSlug = ""
 				_ = ba.store.SetActiveProject(p.Slug)
 				break
 			}
@@ -175,11 +185,17 @@ func (ba *BacklogApp) buildUI() {
 
 	leftPane := container.NewBorder(leftHeader, nil, nil, nil, ba.tasksList)
 
-	// Right section (Detail Inspector pane)
+	// Right section (Tabs: 1. Tasks & Details, 2. Specification Text Editor)
 	detailCallbacks := TaskDetailCallbacks{
 		OnToggleDone: func(taskID string, done bool) {
 			activeSlug := ba.store.GetActiveProjectSlug()
 			if updated, err := ba.store.CompleteTask(activeSlug, taskID, done); err == nil {
+				ba.detailView.ShowTask(*updated)
+			}
+		},
+		OnDeprecate: func(taskID string, deprecated bool) {
+			activeSlug := ba.store.GetActiveProjectSlug()
+			if updated, err := ba.store.DeprecateTask(activeSlug, taskID, deprecated); err == nil {
 				ba.detailView.ShowTask(*updated)
 			}
 		},
@@ -201,15 +217,51 @@ func (ba *BacklogApp) buildUI() {
 	ba.burnUpChart = NewBurnUpChart()
 	ba.detailView = NewTaskDetailView(detailCallbacks)
 
-	// Horizontal split for right pane: Burn-up chart on top, Task detail on bottom
+	// Tab 1: Tasks overview & detail view
 	rightSplit := container.NewVSplit(
 		container.NewPadded(ba.burnUpChart.Container),
 		container.NewPadded(ba.detailView.Container),
 	)
 	rightSplit.SetOffset(0.36)
 
+	// Tab 2: Composite Project Specification editor
+	ba.specEntry = widget.NewMultiLineEntry()
+	ba.specEntry.Wrapping = fyne.TextWrapWord
+	ba.specEntry.SetPlaceHolder("Write the composite project specification here...\n\nDescribe the project's purpose, scope, and technical design with explicit references to ticket IDs (e.g. #1, #2).\nTickets not referenced in this document are considered out of scope or deprecated.")
+
+	ba.specStatus = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+
+	ba.specSaveBtn = widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() {
+		activeSlug := ba.store.GetActiveProjectSlug()
+		if activeSlug != "" {
+			if err := ba.store.UpdateProjectSpecification(activeSlug, ba.specEntry.Text); err == nil {
+				ba.specStatus.SetText("✔ Saved")
+			} else {
+				ba.specStatus.SetText("⚠️ Error saving")
+			}
+		}
+	})
+	ba.specSaveBtn.Importance = widget.HighImportance
+
+	specHeader := container.NewBorder(
+		nil, nil,
+		widget.NewLabelWithStyle("Composite Project Specification", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		container.NewHBox(ba.specStatus, ba.specSaveBtn),
+	)
+
+	specPanel := container.NewBorder(
+		container.NewVBox(specHeader, widget.NewSeparator()),
+		nil, nil, nil,
+		ba.specEntry,
+	)
+
+	rightTabs := container.NewAppTabs(
+		container.NewTabItemWithIcon("Tasks & Details", theme.ListIcon(), rightSplit),
+		container.NewTabItemWithIcon("Specification", theme.DocumentIcon(), container.NewPadded(specPanel)),
+	)
+
 	// Master-detail Split view
-	split := container.NewHSplit(leftPane, rightSplit)
+	split := container.NewHSplit(leftPane, rightTabs)
 	split.SetOffset(0.44)
 
 	ba.window.SetContent(split)
@@ -293,6 +345,24 @@ func (ba *BacklogApp) refreshTasks() {
 	}
 }
 
+func (ba *BacklogApp) refreshSpec() {
+	activeSlug := ba.store.GetActiveProjectSlug()
+	if ba.loadedSpecSlug == activeSlug {
+		return
+	}
+	ba.loadedSpecSlug = activeSlug
+	if activeSlug != "" {
+		if p, err := ba.store.GetProject(activeSlug); err == nil && p != nil {
+			ba.specEntry.SetText(p.Specification)
+		} else {
+			ba.specEntry.SetText("")
+		}
+	} else {
+		ba.specEntry.SetText("")
+	}
+	ba.specStatus.SetText("")
+}
+
 func (ba *BacklogApp) refreshAll() {
 	ba.refreshProjects()
 	activeSlug := ba.store.GetActiveProjectSlug()
@@ -300,6 +370,7 @@ func (ba *BacklogApp) refreshAll() {
 	ba.summaryBar.Update(sum)
 	ba.filterBar.UpdateCounts(sum)
 	ba.refreshTasks()
+	ba.refreshSpec()
 	if ba.tray != nil {
 		ba.tray.Refresh()
 	}

@@ -250,3 +250,43 @@ func TestCLISettingsCommands(t *testing.T) {
 		t.Fatalf("settingsResetCmd via HTTP failed: %v", err)
 	}
 }
+
+func TestCLIDeprecateCommand(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "backlog-cli-dep-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	st, err := store.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	_, _ = st.CreateProject("dep-cli-proj", "Dep CLI", "")
+	task, _ := st.AddTask("dep-cli-proj", model.Task{Title: "CLI Dep Task", Tier: model.Tier2, Size: model.SizeS})
+
+	router := chi.NewRouter()
+	h := server.NewAPIHandler(st)
+	h.RegisterRoutes(router)
+	ts := httptest.NewServer(router)
+	defer ts.Close()
+
+	oldAPIURL := flagAPIURL
+	oldProject := flagProject
+	defer func() {
+		flagAPIURL = oldAPIURL
+		flagProject = oldProject
+	}()
+
+	flagAPIURL = ts.URL
+	flagProject = "dep-cli-proj"
+
+	if err := deprecateCmd.RunE(deprecateCmd, []string{task.ID}); err != nil {
+		t.Fatalf("deprecateCmd failed: %v", err)
+	}
+
+	tasks, _ := st.ListTasks("dep-cli-proj", model.TaskFilter{})
+	if len(tasks) != 1 || !tasks[0].Deprecated || !tasks[0].Done {
+		t.Fatalf("expected task deprecated, got %+v", tasks)
+	}
+}

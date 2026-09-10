@@ -81,10 +81,13 @@ func TestTaskDetailView(t *testing.T) {
 	edited := false
 	deleted := false
 
+	deprecatedCalled := false
+
 	dv := ui.NewTaskDetailView(ui.TaskDetailCallbacks{
 		OnToggleDone: func(taskID string, done bool) { toggled = true },
 		OnEdit:       func(task model.Task) { edited = true },
 		OnDelete:     func(taskID string) { deleted = true },
+		OnDeprecate:  func(taskID string, deprecated bool) { deprecatedCalled = true },
 	})
 
 	task := model.Task{
@@ -97,6 +100,8 @@ func TestTaskDetailView(t *testing.T) {
 		Size:        model.SizeL,
 		Tier:        model.Tier1,
 		Assignee:    "manuel",
+		Deprecated:  true,
+		Done:        true,
 	}
 
 	dv.ShowTask(task)
@@ -110,6 +115,7 @@ func TestTaskDetailView(t *testing.T) {
 	_ = toggled
 	_ = edited
 	_ = deleted
+	_ = deprecatedCalled
 }
 
 func TestTaskItemAndRow(t *testing.T) {
@@ -117,14 +123,15 @@ func TestTaskItemAndRow(t *testing.T) {
 
 	item := ui.NewTaskRowItem(func(taskID string, done bool) {})
 	task := model.Task{
-		ID:        "5",
-		ParentID:  "1",
-		DependsOn: []string{"2"},
-		Title:     "Subtask blocked",
-		Done:      false,
-		Size:      model.SizeM,
-		Tier:      model.Tier2,
-		Assignee:  "claude",
+		ID:         "5",
+		ParentID:   "1",
+		DependsOn:  []string{"2"},
+		Title:      "Subtask blocked",
+		Done:       true,
+		Deprecated: true,
+		Size:       model.SizeM,
+		Tier:       model.Tier2,
+		Assignee:   "claude",
 	}
 
 	item.Bind(task)
