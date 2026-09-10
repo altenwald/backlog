@@ -102,27 +102,21 @@ func (tm *TrayManager) Refresh() {
 		})
 		projectMenuItems = append(projectMenuItems, item)
 	}
-	projectsSubmenu := fyne.NewMenuItem("📁 Switch Project", nil)
+	projectsSubmenu := fyne.NewMenuItem("Switch Project", nil)
 	projectsSubmenu.ChildMenu = fyne.NewMenu("Projects", projectMenuItems...)
 
 	// Actions
-	openItem := fyne.NewMenuItem("🪟 Open Backlog", func() {
+	openItem := fyne.NewMenuItem("Open Backlog", func() {
 		tm.window.Show()
 		tm.window.RequestFocus()
 	})
 
-	addItem := fyne.NewMenuItem("➕ New Task...", func() {
+	addItem := fyne.NewMenuItem("New Task...", func() {
 		tm.window.Show()
 		tm.window.RequestFocus()
 		if tm.onAddClick != nil {
 			tm.onAddClick()
 		}
-	})
-
-	aboutItem := fyne.NewMenuItem("ℹ️ About Backlog", func() {
-		tm.window.Show()
-		tm.window.RequestFocus()
-		ShowAboutDialog(tm.window)
 	})
 
 	// Set IsQuit to true to avoid duplicate localized system quit item
@@ -136,7 +130,6 @@ func (tm *TrayManager) Refresh() {
 		addItem,
 		projectsSubmenu,
 		fyne.NewMenuItemSeparator(),
-		aboutItem,
 		quitItem,
 	}
 
