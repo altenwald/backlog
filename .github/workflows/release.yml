@@ -167,7 +167,7 @@ jobs:
       - name: Install Linux dependencies for Fyne
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev xorg-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev libasound2-dev libwayland-dev libxkbcommon-dev wayland-protocols
 
       - name: Build Linux binary
         run: |
@@ -233,15 +233,18 @@ jobs:
         with:
           usesh: true
           prepare: |
-            pkg install -y go git gcc pkgconf xorg libglvnd
+            pkg install -y go git gcc pkgconf xorg libglvnd wayland wayland-protocols libxkbcommon
           run: |
             TAG="${{ github.ref_name || inputs.tag_name }}"
             COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
             BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-            LDFLAGS="-s -w -X github.com/altenwald/backlog/pkg/version.Version=${TAG} -X github.com/altenwald/backlog/pkg/version.GitCommit=${COMMIT} -X github.com/altenwald/backlog/pkg/version.BuildDate=${BUILD_DATE}"
+            LDFLAGS="-s -w -extldflags '-Wl,--allow-multiple-definition' -X github.com/altenwald/backlog/pkg/version.Version=${TAG} -X github.com/altenwald/backlog/pkg/version.GitCommit=${COMMIT} -X github.com/altenwald/backlog/pkg/version.BuildDate=${BUILD_DATE}"
             mkdir -p bin dist
             git config --global --add safe.directory "$PWD" || true
-            CGO_ENABLED=1 go build -buildvcs=false -ldflags="${LDFLAGS}" -o bin/backlog ./cmd/backlog
+            export CGO_ENABLED=1
+            export CGO_LDFLAGS_ALLOW=".*"
+            export CGO_LDFLAGS="-Wl,--allow-multiple-definition"
+            go build -buildvcs=false -ldflags="${LDFLAGS}" -o bin/backlog ./cmd/backlog
             tar -czvf "dist/backlog-${TAG}-freebsd-amd64.tar.gz" -C bin backlog
 
       - name: Upload FreeBSD artifacts
