@@ -32,10 +32,12 @@ type BacklogApp struct {
 	displayedTasks []model.Task
 	selectedTaskID string
 
-	specEntry      *widget.Entry
-	specSaveBtn    *widget.Button
-	specStatus     *widget.Label
-	loadedSpecSlug string
+	specEntry          *widget.Entry
+	specSaveBtn        *widget.Button
+	specStatus         *widget.Label
+	loadedSpecSlug     string
+	lastLoadedSpecText string
+	specModified       bool
 }
 
 func GetAppIconResource() fyne.Resource {
@@ -98,9 +100,10 @@ func (ba *BacklogApp) buildUI() {
 	// Project selector
 	ba.projectSelect = widget.NewSelect([]string{}, func(selectedName string) {
 		activeSlug := ba.store.GetActiveProjectSlug()
-		// Auto-save specification of previous project if modified
-		if activeSlug != "" && ba.loadedSpecSlug == activeSlug && ba.specEntry != nil {
+		// Auto-save specification of previous project ONLY IF it was modified by user in GUI
+		if activeSlug != "" && ba.loadedSpecSlug == activeSlug && ba.specEntry != nil && ba.specModified {
 			_ = ba.store.UpdateProjectSpecification(activeSlug, ba.specEntry.Text)
+			ba.specModified = false
 		}
 		for _, p := range ba.store.ListProjects() {
 			if (p.Name == selectedName || p.Slug == selectedName) && p.Slug != activeSlug {
@@ -233,6 +236,15 @@ func (ba *BacklogApp) buildUI() {
 	ba.specEntry = widget.NewMultiLineEntry()
 	ba.specEntry.Wrapping = fyne.TextWrapWord
 	ba.specEntry.SetPlaceHolder("Write the composite project specification here...\n\nDescribe the project's purpose, scope, and technical design with explicit references to ticket IDs (e.g. #1, #2).\nTickets not referenced in this document are considered out of scope or deprecated.")
+	ba.specEntry.OnChanged = func(s string) {
+		if s != ba.lastLoadedSpecText {
+			ba.specModified = true
+			ba.specStatus.SetText("● Unsaved")
+		} else {
+			ba.specModified = false
+			ba.specStatus.SetText("")
+		}
+	}
 
 	ba.specStatus = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
 
@@ -240,6 +252,8 @@ func (ba *BacklogApp) buildUI() {
 		activeSlug := ba.store.GetActiveProjectSlug()
 		if activeSlug != "" {
 			if err := ba.store.UpdateProjectSpecification(activeSlug, ba.specEntry.Text); err == nil {
+				ba.lastLoadedSpecText = ba.specEntry.Text
+				ba.specModified = false
 				ba.specStatus.SetText("✔ Saved")
 			} else {
 				ba.specStatus.SetText("⚠️ Error saving")
@@ -351,21 +365,49 @@ func (ba *BacklogApp) refreshTasks() {
 }
 
 func (ba *BacklogApp) refreshSpec() {
-	activeSlug := ba.store.GetActiveProjectSlug()
-	if ba.loadedSpecSlug == activeSlug {
+	if ba.specEntry == nil {
 		return
 	}
-	ba.loadedSpecSlug = activeSlug
-	if activeSlug != "" {
-		if p, err := ba.store.GetProject(activeSlug); err == nil && p != nil {
-			ba.specEntry.SetText(p.Specification)
-		} else {
-			ba.specEntry.SetText("")
-		}
-	} else {
+	activeSlug := ba.store.GetActiveProjectSlug()
+	if activeSlug == "" {
+		ba.loadedSpecSlug = ""
+		ba.lastLoadedSpecText = ""
+		ba.specModified = false
 		ba.specEntry.SetText("")
+		ba.specStatus.SetText("")
+		return
 	}
-	ba.specStatus.SetText("")
+
+	p, err := ba.store.GetProject(activeSlug)
+	targetSpec := ""
+	if err == nil && p != nil {
+		targetSpec = p.Specification
+	}
+
+	// 1. If switching project or first load
+	if ba.loadedSpecSlug != activeSlug {
+		ba.loadedSpecSlug = activeSlug
+		ba.lastLoadedSpecText = targetSpec
+		ba.specModified = false
+		ba.specEntry.SetText(targetSpec)
+		ba.specStatus.SetText("")
+		return
+	}
+
+	// 2. Same project: check if specification was updated in store (e.g. by MCP, CLI, or API)
+	if targetSpec != ba.lastLoadedSpecText {
+		// Only update if user does not have uncommitted/unsaved local typing in the GUI
+		if !ba.specModified || ba.specEntry.Text == ba.lastLoadedSpecText {
+			ba.lastLoadedSpecText = targetSpec
+			ba.specModified = false
+			ba.specEntry.SetText(targetSpec)
+			ba.specStatus.SetText("✔ Updated")
+		} else if ba.specEntry.Text == targetSpec {
+			ba.lastLoadedSpecText = targetSpec
+			ba.specModified = false
+			ba.specStatus.SetText("✔ Synced")
+		}
+	}
 }
 
 func (ba *BacklogApp) refreshAll() {

@@ -4,7 +4,10 @@ import (
 	"os"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/store"
 )
@@ -202,5 +205,104 @@ func TestOtherDialogs(t *testing.T) {
 	_ = savedTask
 	_ = editedTask
 	_ = deletedProject
+}
+
+func TestAppSpecRefreshLive(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "backlog-ui-spec-refresh-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	st, err := store.NewStore(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = st.CreateProject("test-proj", "Test Project", "Description")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = st.SetActiveProject("test-proj")
+	_ = st.UpdateProjectSpecification("test-proj", "Initial Spec v1")
+
+	a := test.NewApp()
+	w := a.NewWindow("Test")
+	bApp := &BacklogApp{
+		fyneApp: a,
+		window:  w,
+		store:   st,
+	}
+
+	// Initialize specEntry, status, and save button
+	bApp.specEntry = widget.NewMultiLineEntry()
+	bApp.specEntry.OnChanged = func(s string) {
+		if s != bApp.lastLoadedSpecText {
+			bApp.specModified = true
+			bApp.specStatus.SetText("● Unsaved")
+		} else {
+			bApp.specModified = false
+			bApp.specStatus.SetText("")
+		}
+	}
+	bApp.specStatus = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+	bApp.specSaveBtn = widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() {
+		activeSlug := bApp.store.GetActiveProjectSlug()
+		if activeSlug != "" {
+			if err := bApp.store.UpdateProjectSpecification(activeSlug, bApp.specEntry.Text); err == nil {
+				bApp.lastLoadedSpecText = bApp.specEntry.Text
+				bApp.specModified = false
+				bApp.specStatus.SetText("✔ Saved")
+			} else {
+				bApp.specStatus.SetText("⚠️ Error saving")
+			}
+		}
+	})
+
+	// Initial load
+	bApp.refreshSpec()
+
+	if bApp.specEntry.Text != "Initial Spec v1" {
+		t.Fatalf("expected 'Initial Spec v1', got %q", bApp.specEntry.Text)
+	}
+
+	// 1. Simulate external update via MCP / CLI / API
+	newExternalSpec := "# Updated Spec by MCP\n- Ticket 1"
+	if err := st.UpdateProjectSpecification("test-proj", newExternalSpec); err != nil {
+		t.Fatal(err)
+	}
+
+	// Trigger refreshSpec as listenEvents does
+	bApp.refreshSpec()
+
+	if bApp.specEntry.Text != newExternalSpec {
+		t.Fatalf("expected specEntry to reflect external update %q, got %q", newExternalSpec, bApp.specEntry.Text)
+	}
+	if bApp.specStatus.Text != "✔ Updated" {
+		t.Fatalf("expected status '✔ Updated', got %q", bApp.specStatus.Text)
+	}
+
+	// 2. Simulate user typing in GUI
+	bApp.specEntry.SetText("# User Unsaved Draft")
+	if !bApp.specModified {
+		t.Fatal("expected specModified to be true after typing")
+	}
+	if bApp.specStatus.Text != "● Unsaved" {
+		t.Fatalf("expected status '● Unsaved', got %q", bApp.specStatus.Text)
+	}
+
+	// 3. Simulate clicking Save in GUI
+	bApp.specSaveBtn.OnTapped()
+	if bApp.specModified {
+		t.Fatal("expected specModified to be false after Save")
+	}
+	if bApp.specStatus.Text != "✔ Saved" {
+		t.Fatalf("expected status '✔ Saved', got %q", bApp.specStatus.Text)
+	}
+
+	savedProj, _ := st.GetProject("test-proj")
+	if savedProj.Specification != "# User Unsaved Draft" {
+		t.Fatalf("expected store to have saved draft, got %q", savedProj.Specification)
+	}
 }
 
