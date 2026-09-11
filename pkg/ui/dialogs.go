@@ -27,6 +27,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 
 	descEntry := widget.NewMultiLineEntry()
 	descEntry.Wrapping = fyne.TextWrapWord
+	descEntry.TextStyle = fyne.TextStyle{Monospace: true}
 	descEntry.SetMinRowsVisible(6)
 	descEntry.SetPlaceHolder("Details and context (Markdown supported)...")
 
@@ -53,6 +54,7 @@ func ShowAddTaskDialog(parent fyne.Window, projectSlug string, onSave func(task 
 
 	resEntry := widget.NewMultiLineEntry()
 	resEntry.Wrapping = fyne.TextWrapWord
+	resEntry.TextStyle = fyne.TextStyle{Monospace: true}
 	resEntry.SetMinRowsVisible(3)
 	resEntry.SetPlaceHolder("Implementation details / resolution summary (optional)...")
 
@@ -112,6 +114,7 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 
 	descEntry := widget.NewMultiLineEntry()
 	descEntry.Wrapping = fyne.TextWrapWord
+	descEntry.TextStyle = fyne.TextStyle{Monospace: true}
 	descEntry.SetMinRowsVisible(6)
 	descEntry.SetText(task.Description)
 
@@ -146,6 +149,7 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 
 	resEntry := widget.NewMultiLineEntry()
 	resEntry.Wrapping = fyne.TextWrapWord
+	resEntry.TextStyle = fyne.TextStyle{Monospace: true}
 	resEntry.SetMinRowsVisible(4)
 	resEntry.SetPlaceHolder("Summary of implementation details, architectural decisions, and resolution (Markdown supported)...")
 	resEntry.SetText(task.Resolution)
@@ -208,6 +212,7 @@ func ShowNewProjectDialog(parent fyne.Window, onSave func(slug, name, desc strin
 
 	descEntry := widget.NewMultiLineEntry()
 	descEntry.Wrapping = fyne.TextWrapWord
+	descEntry.TextStyle = fyne.TextStyle{Monospace: true}
 	descEntry.SetMinRowsVisible(4)
 	descEntry.SetPlaceHolder("Project description...")
 
@@ -331,6 +336,7 @@ func ShowAboutDialog(parent fyne.Window) {
 
 	licenseEntry := widget.NewMultiLineEntry()
 	licenseEntry.Wrapping = fyne.TextWrapWord
+	licenseEntry.TextStyle = fyne.TextStyle{Monospace: true}
 	licenseEntry.SetMinRowsVisible(6)
 	licenseEntry.SetText(`MIT License
 
@@ -461,7 +467,7 @@ func ShowSettingsDialog(parent fyne.Window, st *store.Store) {
 	// ── Custom / user instructions (editable) ──────────────────────────────
 	customEntry := widget.NewMultiLineEntry()
 	customEntry.Wrapping = fyne.TextWrapWord
-	customEntry.TextStyle = fyne.TextStyle{} // Standard proportional font
+	customEntry.TextStyle = fyne.TextStyle{Monospace: true}
 	customEntry.SetPlaceHolder("Add your own methodology, conventions, or workflow rules here…")
 
 	// Load persisted instructions (fall back to default when empty)

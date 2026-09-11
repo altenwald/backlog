@@ -246,6 +246,7 @@ func (ba *BacklogApp) buildUI() {
 
 	ba.specEntry = widget.NewMultiLineEntry()
 	ba.specEntry.Wrapping = fyne.TextWrapWord
+	ba.specEntry.TextStyle = fyne.TextStyle{Monospace: true}
 	ba.specEntry.SetPlaceHolder("Write the composite project specification here...\n\nDescribe the project's purpose, scope, and technical design with explicit references to ticket IDs (e.g. #1, #2).\nTickets not referenced in this document are considered out of scope or deprecated.")
 	ba.specEntry.OnChanged = func(s string) {
 		if s != ba.lastLoadedSpecText {
