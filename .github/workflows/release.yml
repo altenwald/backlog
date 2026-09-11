@@ -233,7 +233,7 @@ jobs:
         with:
           usesh: true
           prepare: |
-            pkg install -y go git gcc pkgconf xorg libglvnd wayland wayland-protocols libxkbcommon
+            pkg install -y go git gcc pkgconf xorg libglvnd
           run: |
             TAG="${{ github.ref_name || inputs.tag_name }}"
             COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -244,7 +244,7 @@ jobs:
             export CGO_ENABLED=1
             export CGO_LDFLAGS_ALLOW=".*"
             export CGO_LDFLAGS="-Wl,--allow-multiple-definition"
-            go build -buildvcs=false -ldflags="${LDFLAGS}" -o bin/backlog ./cmd/backlog
+            go build -tags x11 -buildvcs=false -ldflags="${LDFLAGS}" -o bin/backlog ./cmd/backlog
             tar -czvf "dist/backlog-${TAG}-freebsd-amd64.tar.gz" -C bin backlog
 
       - name: Upload FreeBSD artifacts
