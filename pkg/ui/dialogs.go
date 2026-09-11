@@ -334,23 +334,27 @@ func ShowAboutDialog(parent fyne.Window) {
 	)
 	linksCenter := container.NewCenter(linksBox)
 
-	licenseEntry := widget.NewMultiLineEntry()
-	licenseEntry.Wrapping = fyne.TextWrapWord
-	licenseEntry.TextStyle = fyne.TextStyle{Monospace: true}
-	licenseEntry.SetMinRowsVisible(6)
-	licenseEntry.SetText(`MIT License
+	licenseHeading := widget.NewLabelWithStyle("📜 MIT License", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
-Copyright (c) 2026 Altenwald / Manuel Rubio
+	const mitLicenseMarkdown = `Copyright (c) 2026 Altenwald / Manuel Rubio
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.`)
-	licenseEntry.Disable()
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.`
 
-	licenseAccordion := widget.NewAccordion(
-		widget.NewAccordionItem("📜 View License (MIT)", licenseEntry),
+	licenseRichText := widget.NewRichTextFromMarkdown(mitLicenseMarkdown)
+	licenseRichText.Wrapping = fyne.TextWrapWord
+
+	licenseCardBg := canvas.NewRectangle(theme.ButtonColor())
+	licenseCardBg.CornerRadius = 6
+	licenseCard := container.NewStack(
+		licenseCardBg,
+		container.NewPadded(container.NewVBox(
+			licenseHeading,
+			licenseRichText,
+		)),
 	)
 
 	content := container.NewVBox(
@@ -362,7 +366,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		copyrightLabel,
 		linksCenter,
 		widget.NewSeparator(),
-		licenseAccordion,
+		licenseCard,
 	)
 
 	closeBtn := widget.NewButton("Close", func() {
@@ -382,7 +386,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 	)
 
 	win.SetContent(layout)
-	win.Resize(fyne.NewSize(480, 520))
+	win.Resize(fyne.NewSize(520, 600))
 	win.CenterOnScreen()
 	win.Show()
 	win.RequestFocus()
