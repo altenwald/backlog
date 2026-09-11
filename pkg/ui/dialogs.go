@@ -5,11 +5,14 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
@@ -320,37 +323,86 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 	d.Show()
 }
 
-// ShowSettingsDialog opens the application settings dialog.
+var (
+	activeSettingsMu     sync.Mutex
+	activeSettingsWindow fyne.Window
+)
+
+// ShowSettingsDialog opens the application settings window.
 // The core Backlog instructions are shown read-only; the user can freely edit
 // the custom instructions section that is appended to the core prompt.
 func ShowSettingsDialog(parent fyne.Window, st *store.Store) {
-	// ── Core instructions (read-only) ──────────────────────────────────────
-	coreEntry := widget.NewMultiLineEntry()
-	coreEntry.Wrapping = fyne.TextWrapWord
-	coreEntry.SetText(server.BacklogCoreInstructions)
-	coreEntry.Disable()
-	coreEntry.SetMinRowsVisible(10)
+	activeSettingsMu.Lock()
+	if activeSettingsWindow != nil {
+		win := activeSettingsWindow
+		activeSettingsMu.Unlock()
+		win.Show()
+		win.RequestFocus()
+		return
+	}
+
+	appInstance := fyne.CurrentApp()
+	if appInstance == nil {
+		activeSettingsMu.Unlock()
+		return
+	}
+
+	win := appInstance.NewWindow("Settings")
+	activeSettingsWindow = win
+	activeSettingsMu.Unlock()
+
+	win.SetIcon(GetAppIconResource())
+	win.SetOnClosed(func() {
+		activeSettingsMu.Lock()
+		activeSettingsWindow = nil
+		activeSettingsMu.Unlock()
+	})
+
+	// Close on Cmd+W (or Ctrl+W)
+	win.Canvas().AddShortcut(&desktop.CustomShortcut{
+		KeyName:  fyne.KeyW,
+		Modifier: fyne.KeyModifierShortcutDefault,
+	}, func(shortcut fyne.Shortcut) {
+		win.Close()
+	})
+
+	// ── Core instructions (read-only, formatted in high-contrast Markdown) ──
+	coreRichText := widget.NewRichTextFromMarkdown(server.BacklogCoreInstructions)
+	coreRichText.Wrapping = fyne.TextWrapWord
+
+	coreScroll := container.NewVScroll(container.NewPadded(coreRichText))
+
+	var copyBtn *widget.Button
+	copyBtn = widget.NewButtonWithIcon("Copy to clipboard", theme.ContentCopyIcon(), func() {
+		win.Clipboard().SetContent(server.BacklogCoreInstructions)
+		copyBtn.SetText("✔ Copied!")
+		go func() {
+			time.Sleep(2 * time.Second)
+			copyBtn.SetText("Copy to clipboard")
+		}()
+	})
+	copyBtn.Importance = widget.LowImportance
 
 	coreLockLabel := widget.NewLabelWithStyle(
 		"🔒 Core instructions — read-only (defines the Backlog tool protocol)",
 		fyne.TextAlignLeading,
 		fyne.TextStyle{Italic: true},
 	)
-	coreLockLabel.Wrapping = fyne.TextWrapWord
 
+	coreTop := container.NewBorder(nil, nil, nil, copyBtn, coreLockLabel)
 	coreSection := container.NewBorder(
 		container.NewVBox(
+			coreTop,
 			widget.NewSeparator(),
-			coreLockLabel,
 		),
 		nil, nil, nil,
-		coreEntry,
+		coreScroll,
 	)
 
 	// ── Custom / user instructions (editable) ──────────────────────────────
 	customEntry := widget.NewMultiLineEntry()
 	customEntry.Wrapping = fyne.TextWrapWord
-	customEntry.SetMinRowsVisible(10)
+	customEntry.TextStyle = fyne.TextStyle{} // Standard proportional font
 	customEntry.SetPlaceHolder("Add your own methodology, conventions, or workflow rules here…")
 
 	// Load persisted instructions (fall back to default when empty)
@@ -371,22 +423,23 @@ func ShowSettingsDialog(parent fyne.Window, st *store.Store) {
 		fyne.TextAlignLeading,
 		fyne.TextStyle{Italic: true},
 	)
-	customLabel.Wrapping = fyne.TextWrapWord
 
+	customTop := container.NewBorder(nil, nil, nil, resetBtn, customLabel)
 	customSection := container.NewBorder(
 		container.NewVBox(
+			customTop,
 			widget.NewSeparator(),
-			container.NewBorder(nil, nil, customLabel, resetBtn),
 		),
 		nil, nil, nil,
 		customEntry,
 	)
 
 	// ── Layout ─────────────────────────────────────────────────────────────
-	tabs := container.NewVSplit(coreSection, customSection)
-	tabs.SetOffset(0.4)
+	tabs := container.NewAppTabs(
+		container.NewTabItemWithIcon("Custom Instructions", theme.DocumentCreateIcon(), customSection),
+		container.NewTabItemWithIcon("Core Instructions", theme.InfoIcon(), coreSection),
+	)
 
-	var d dialog.Dialog
 	saveBtn := widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() {
 		text := strings.TrimSpace(customEntry.Text)
 		// Storing empty string means "use default" at next MCP launch
@@ -394,14 +447,16 @@ func ShowSettingsDialog(parent fyne.Window, st *store.Store) {
 			text = ""
 		}
 		if err := st.SaveMCPUserInstructions(text); err != nil {
-			dialog.ShowError(err, parent)
+			dialog.ShowError(err, win)
 			return
 		}
-		d.Hide()
+		win.Close()
 	})
 	saveBtn.Importance = widget.HighImportance
 
-	cancelBtn := widget.NewButton("Cancel", func() { d.Hide() })
+	cancelBtn := widget.NewButton("Cancel", func() {
+		win.Close()
+	})
 
 	buttons := container.NewHBox(cancelBtn, saveBtn)
 	buttonsRight := container.NewBorder(nil, nil, nil, buttons)
@@ -413,7 +468,9 @@ func ShowSettingsDialog(parent fyne.Window, st *store.Store) {
 		tabs,
 	)
 
-	d = dialog.NewCustomWithoutButtons("Settings — MCP Instructions", content, parent)
-	d.Resize(fyne.NewSize(680, 620))
-	d.Show()
+	win.SetContent(content)
+	win.Resize(fyne.NewSize(700, 620))
+	win.CenterOnScreen()
+	win.Show()
+	win.RequestFocus()
 }

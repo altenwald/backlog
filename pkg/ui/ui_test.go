@@ -2,6 +2,7 @@ package ui_test
 
 import (
 	"image/color"
+	"os"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/test"
 	"github.com/altenwald/backlog/pkg/model"
+	"github.com/altenwald/backlog/pkg/store"
 	"github.com/altenwald/backlog/pkg/ui"
 )
 
@@ -265,5 +267,18 @@ func TestBurnUpChart(t *testing.T) {
 	if tObj, ok := chart.ChartWidget().(fyne.Tappable); ok {
 		tObj.Tapped(&fyne.PointEvent{Position: fyne.NewPos(150, 50)})
 	}
+}
+
+func TestShowSettingsDialog(t *testing.T) {
+	a := test.NewApp()
+	w := a.NewWindow("Test")
+	tmpDir, _ := os.MkdirTemp("", "backlog-ui-settings-test-*")
+	defer os.RemoveAll(tmpDir)
+
+	st, _ := store.NewStore(tmpDir)
+	ui.ShowSettingsDialog(w, st)
+
+	// Calling a second time exercises the singleton focus branch
+	ui.ShowSettingsDialog(w, st)
 }
 

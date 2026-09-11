@@ -3,6 +3,7 @@ package cli
 import (
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -290,3 +291,135 @@ func TestCLIDeprecateCommand(t *testing.T) {
 		t.Fatalf("expected task deprecated, got %+v", tasks)
 	}
 }
+
+func TestCLISpecCommand(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "backlog-cli-spec-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	st, err := store.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	_, _ = st.CreateProject("spec-cli-proj", "Spec CLI", "")
+
+	oldDataDir := flagDataDir
+	oldAPIURL := flagAPIURL
+	oldProject := flagProject
+	defer func() {
+		flagDataDir = oldDataDir
+		flagAPIURL = oldAPIURL
+		flagProject = oldProject
+	}()
+
+	flagDataDir = tmpDir
+	flagAPIURL = "http://127.0.0.1:9999" // unreachable so it uses store mode
+	flagProject = ""
+
+	// 1. Missing project error
+	if err := specGetCmd.RunE(specGetCmd, []string{}); err == nil {
+		t.Fatal("expected error with missing project")
+	}
+	if err := specSetCmd.RunE(specSetCmd, []string{"some spec"}); err == nil {
+		t.Fatal("expected error with missing project")
+	}
+
+	flagProject = "spec-cli-proj"
+
+	// 2. Initial empty spec
+	if err := specGetCmd.RunE(specGetCmd, []string{}); err != nil {
+		t.Fatalf("specGetCmd failed: %v", err)
+	}
+
+	// 3. Set spec via text arg
+	testSpec := "# Spec V1\n- Feature A (#1)\n- Feature B (#2)"
+	if err := specSetCmd.RunE(specSetCmd, []string{testSpec}); err != nil {
+		t.Fatalf("specSetCmd failed: %v", err)
+	}
+
+	// 4. Verify spec via get
+	if err := specCmd.RunE(specCmd, []string{}); err != nil {
+		t.Fatalf("specCmd failed: %v", err)
+	}
+
+	stReloaded, _ := store.NewStore(tmpDir)
+	p, _ := stReloaded.GetProject("spec-cli-proj")
+	if p.Specification != testSpec {
+		t.Fatalf("expected spec %q, got %q", testSpec, p.Specification)
+	}
+
+	// 5. Set spec via file flag
+	specFilePath := filepath.Join(tmpDir, "spec.md")
+	fileContent := "# Spec from File\n- Details here"
+	_ = os.WriteFile(specFilePath, []byte(fileContent), 0644)
+
+	flagSpecFile = specFilePath
+	if err := specSetCmd.RunE(specSetCmd, []string{}); err != nil {
+		t.Fatalf("specSetCmd with -f failed: %v", err)
+	}
+	flagSpecFile = ""
+
+	stReloaded, _ = store.NewStore(tmpDir)
+	p, _ = stReloaded.GetProject("spec-cli-proj")
+	if p.Specification != fileContent {
+		t.Fatalf("expected spec from file %q, got %q", fileContent, p.Specification)
+	}
+
+	// 6. Set spec via file as argument
+	_ = os.WriteFile(specFilePath, []byte("# Spec via file arg"), 0644)
+	if err := specSetCmd.RunE(specSetCmd, []string{specFilePath}); err != nil {
+		t.Fatalf("specSetCmd with file arg failed: %v", err)
+	}
+	stReloaded, _ = store.NewStore(tmpDir)
+	p, _ = stReloaded.GetProject("spec-cli-proj")
+	if p.Specification != "# Spec via file arg" {
+		t.Fatalf("expected spec %q, got %q", "# Spec via file arg", p.Specification)
+	}
+
+	// 7. Set spec via stdin
+	r, w, err := os.Pipe()
+	if err == nil {
+		_, _ = w.Write([]byte("# Spec via Stdin"))
+		_ = w.Close()
+		oldStdin := os.Stdin
+		os.Stdin = r
+		err = specSetCmd.RunE(specSetCmd, []string{"-"})
+		os.Stdin = oldStdin
+		_ = r.Close()
+		if err != nil {
+			t.Fatalf("specSetCmd with stdin failed: %v", err)
+		}
+		stReloaded, _ = store.NewStore(tmpDir)
+		p, _ = stReloaded.GetProject("spec-cli-proj")
+		if p.Specification != "# Spec via Stdin" {
+			t.Fatalf("expected spec from stdin %q, got %q", "# Spec via Stdin", p.Specification)
+		}
+	}
+
+	// 8. Missing content error
+	if err := specSetCmd.RunE(specSetCmd, []string{}); err == nil {
+		t.Fatal("expected error with no content")
+	}
+
+	// 9. HTTP daemon mode
+	router := chi.NewRouter()
+	h := server.NewAPIHandler(st)
+	h.RegisterRoutes(router)
+	ts := httptest.NewServer(router)
+	defer ts.Close()
+
+	flagAPIURL = ts.URL
+	if err := specSetCmd.RunE(specSetCmd, []string{"# Daemon Spec"}); err != nil {
+		t.Fatalf("specSetCmd via daemon failed: %v", err)
+	}
+	if err := specGetCmd.RunE(specGetCmd, []string{}); err != nil {
+		t.Fatalf("specGetCmd via daemon failed: %v", err)
+	}
+	p, _ = st.GetProject("spec-cli-proj")
+	if p.Specification != "# Daemon Spec" {
+		t.Fatalf("expected daemon spec %q, got %q", "# Daemon Spec", p.Specification)
+	}
+}
+

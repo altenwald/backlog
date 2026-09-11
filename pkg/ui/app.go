@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
@@ -62,10 +63,14 @@ func NewBacklogApp(st *store.Store) *BacklogApp {
 	aboutMenuItem := fyne.NewMenuItem("About", func() {
 		ShowAboutDialog(w)
 	})
-	settingsMenuItem := fyne.NewMenuItem("Settings...", func() {
+	settingsMenuItem := fyne.NewMenuItem("Settings…", func() {
 		ShowSettingsDialog(w, st)
 	})
-	appMenu := fyne.NewMenu("Backlog", aboutMenuItem, fyne.NewMenuItemSeparator(), settingsMenuItem)
+	settingsMenuItem.Shortcut = &desktop.CustomShortcut{
+		KeyName:  fyne.KeyComma,
+		Modifier: fyne.KeyModifierShortcutDefault,
+	}
+	appMenu := fyne.NewMenu("Backlog", aboutMenuItem, settingsMenuItem)
 	mainMenu := fyne.NewMainMenu(appMenu)
 	w.SetMainMenu(mainMenu)
 

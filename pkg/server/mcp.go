@@ -43,7 +43,13 @@ Follow this standard protocol when interacting with Backlog:
        2) Summary of implementation details and architectural decisions.
        3) Files modified and verification results.
 
-4. ESTIMATION AND PRIORITY TIERS:
+4. COMPOSITE PROJECT SPECIFICATION & DEPRECATION:
+   - Holistic Project Definition: Each project maintains a composite specification document describing the complete architecture, goals, and technical scope with explicit references to ticket IDs (e.g. #1, #2).
+   - Inspecting Specification: Call 'get_project_specification(project="<project-slug>")' to understand the overarching system design and determine which tickets are currently in scope.
+   - Updating Specification: As architecture evolves, requirements change, or tickets are created/completed, keep the specification up-to-date using 'update_project_specification(project="<project-slug>", specification="...")'.
+   - Deprecating Obsolete Work: If a pending ticket is no longer mentioned, relevant, or applicable according to the composite specification, do NOT delete or ignore it. Mark it as deprecated using 'deprecate_task(project="<project-slug>", task_id="<ID>", resolution="...")'. This marks the task as completed and flags it as deprecated with an explanatory resolution.
+
+5. ESTIMATION AND PRIORITY TIERS:
    - Priority Tiers (1 to 5):
      * Tier 1 (Blocker): Critical issues, broken builds, fatal runtime crashes, or severe regressions blocking development or core functionality. Must be addressed immediately before any other work.
      * Tier 2 (Important): Key features, primary milestone deliverables, and high-impact bugs. Essential work planned for the current release or sprint cycle.
@@ -61,13 +67,13 @@ Follow this standard protocol when interacting with Backlog:
      * A task is BLOCKED until all its dependency tasks are marked as completed ('done=true').
      * CRITICAL AGENT RULE: Never pick or start work on a task that is BLOCKED. Always resolve the blocking dependencies first.
 
-5. REPORTING:
+6. REPORTING:
    - Always inform the user when claiming a task, report implementation results, and report completion with the commit hash and resolution summary.`
 
 // BacklogDefaultUserInstructions is the default editable section appended to the core instructions.
 // Users can replace or extend this text from Settings to match their team's methodology.
 const BacklogDefaultUserInstructions = `
-6. DEVELOPMENT METHODOLOGY:
+7. DEVELOPMENT METHODOLOGY:
    - Strict TDD (Test-Driven Development):
      * Always develop following a strict TDD methodology: write or update tests FIRST to specify the expected behavior.
      * Implement the code changes to satisfy the tests.
