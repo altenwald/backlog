@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2/test"
+	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/store"
 )
 
@@ -112,3 +113,94 @@ func TestSettingsWindowSizeAndLayout(t *testing.T) {
 
 	win.Close()
 }
+
+func TestAboutWindowLifecycle(t *testing.T) {
+	a := test.NewApp()
+	w := a.NewWindow("Test")
+
+	// 1. Open About window
+	ShowAboutDialog(w)
+
+	activeAboutMu.Lock()
+	win := activeAboutWindow
+	activeAboutMu.Unlock()
+
+	if win == nil {
+		t.Fatal("expected activeAboutWindow to be non-nil")
+	}
+	if win.Title() != "About Backlog" {
+		t.Fatalf("expected title 'About Backlog', got %q", win.Title())
+	}
+
+	// 2. Calling again while open focuses existing window
+	ShowAboutDialog(w)
+
+	activeAboutMu.Lock()
+	win2 := activeAboutWindow
+	activeAboutMu.Unlock()
+
+	if win2 != win {
+		t.Fatal("expected activeAboutWindow to be the same instance")
+	}
+
+	// 3. Verify content
+	content := win.Content()
+	if content == nil {
+		t.Fatal("expected window content to be non-nil")
+	}
+
+	// 4. Close the window and verify activeAboutWindow is reset
+	win.Close()
+
+	activeAboutMu.Lock()
+	winClosed := activeAboutWindow
+	activeAboutMu.Unlock()
+
+	if winClosed != nil {
+		t.Fatal("expected activeAboutWindow to be nil after close")
+	}
+
+	// 5. Open again with nil parent (e.g. when main window is hidden or called independently)
+	ShowAboutDialog(nil)
+	activeAboutMu.Lock()
+	win3 := activeAboutWindow
+	activeAboutMu.Unlock()
+	if win3 == nil {
+		t.Fatal("expected fresh activeAboutWindow to be created with nil parent")
+	}
+	win3.Close()
+}
+
+func TestOtherDialogs(t *testing.T) {
+	a := test.NewApp()
+	w := a.NewWindow("Test")
+
+	// Test ShowAddTaskDialog
+	savedTask := false
+	ShowAddTaskDialog(w, "my-project", func(task model.Task) {
+		savedTask = true
+	})
+
+	// Test ShowEditTaskDialog
+	editedTask := false
+	task := model.Task{
+		ID:    "1",
+		Title: "Test Task",
+		Size:  model.SizeM,
+		Tier:  model.Tier2,
+	}
+	ShowEditTaskDialog(w, task, func(updated model.Task) {
+		editedTask = true
+	})
+
+	// Test ShowDeleteProjectDialog
+	deletedProject := false
+	ShowDeleteProjectDialog(w, "My Project", "my-project", func() {
+		deletedProject = true
+	})
+
+	_ = savedTask
+	_ = editedTask
+	_ = deletedProject
+}
+

@@ -250,7 +250,48 @@ func ShowDeleteProjectDialog(parent fyne.Window, projectName, projectSlug string
 	}, parent)
 }
 
+var (
+	activeAboutMu     sync.Mutex
+	activeAboutWindow fyne.Window
+)
+
+// ShowAboutDialog opens the About Backlog window as an independent window.
+// If the window is already open, it is brought to the front and focused.
 func ShowAboutDialog(parent fyne.Window) {
+	activeAboutMu.Lock()
+	if activeAboutWindow != nil {
+		win := activeAboutWindow
+		activeAboutMu.Unlock()
+		win.Show()
+		win.RequestFocus()
+		return
+	}
+
+	appInstance := fyne.CurrentApp()
+	if appInstance == nil {
+		activeAboutMu.Unlock()
+		return
+	}
+
+	win := appInstance.NewWindow("About Backlog")
+	activeAboutWindow = win
+	activeAboutMu.Unlock()
+
+	win.SetIcon(GetAppIconResource())
+	win.SetOnClosed(func() {
+		activeAboutMu.Lock()
+		activeAboutWindow = nil
+		activeAboutMu.Unlock()
+	})
+
+	// Close on Cmd+W (or Ctrl+W)
+	win.Canvas().AddShortcut(&desktop.CustomShortcut{
+		KeyName:  fyne.KeyW,
+		Modifier: fyne.KeyModifierShortcutDefault,
+	}, func(shortcut fyne.Shortcut) {
+		win.Close()
+	})
+
 	iconImg := canvas.NewImageFromResource(GetAppIconResource())
 	iconImg.SetMinSize(fyne.NewSize(72, 72))
 	iconImg.FillMode = canvas.ImageFillContain
@@ -318,9 +359,27 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 		licenseAccordion,
 	)
 
-	d := dialog.NewCustom("About Backlog", "Close", content, parent)
-	d.Resize(fyne.NewSize(480, 520))
-	d.Show()
+	closeBtn := widget.NewButton("Close", func() {
+		win.Close()
+	})
+	closeBtn.Importance = widget.MediumImportance
+	closeCenter := container.NewCenter(closeBtn)
+
+	scrollContent := container.NewVScroll(container.NewPadded(content))
+
+	layout := container.NewBorder(
+		nil,
+		container.NewVBox(widget.NewSeparator(), closeCenter),
+		nil,
+		nil,
+		scrollContent,
+	)
+
+	win.SetContent(layout)
+	win.Resize(fyne.NewSize(480, 520))
+	win.CenterOnScreen()
+	win.Show()
+	win.RequestFocus()
 }
 
 var (
