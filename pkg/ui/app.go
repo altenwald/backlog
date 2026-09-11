@@ -2,6 +2,7 @@ package ui
 
 import (
 	_ "embed"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -33,8 +34,14 @@ type BacklogApp struct {
 	selectedTaskID string
 
 	specEntry          *widget.Entry
+	specRichText       *widget.RichText
+	specRichScroll     *container.Scroll
+	specContentStack   *fyne.Container
+	specPreviewBtn     *widget.Button
+	specEditBtn        *widget.Button
 	specSaveBtn        *widget.Button
 	specStatus         *widget.Label
+	specEditMode       bool
 	loadedSpecSlug     string
 	lastLoadedSpecText string
 	specModified       bool
@@ -232,7 +239,11 @@ func (ba *BacklogApp) buildUI() {
 	)
 	rightSplit.SetOffset(0.36)
 
-	// Tab 2: Composite Project Specification editor
+	// Tab 2: Composite Project Specification editor & rich text preview
+	ba.specRichText = widget.NewRichTextFromMarkdown("")
+	ba.specRichText.Wrapping = fyne.TextWrapWord
+	ba.specRichScroll = container.NewVScroll(container.NewPadded(ba.specRichText))
+
 	ba.specEntry = widget.NewMultiLineEntry()
 	ba.specEntry.Wrapping = fyne.TextWrapWord
 	ba.specEntry.SetPlaceHolder("Write the composite project specification here...\n\nDescribe the project's purpose, scope, and technical design with explicit references to ticket IDs (e.g. #1, #2).\nTickets not referenced in this document are considered out of scope or deprecated.")
@@ -248,12 +259,23 @@ func (ba *BacklogApp) buildUI() {
 
 	ba.specStatus = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
 
+	ba.specPreviewBtn = widget.NewButtonWithIcon("Preview", theme.InfoIcon(), func() {
+		ba.setSpecEditMode(false)
+	})
+	ba.specPreviewBtn.Importance = widget.HighImportance
+
+	ba.specEditBtn = widget.NewButtonWithIcon("Edit", theme.DocumentCreateIcon(), func() {
+		ba.setSpecEditMode(true)
+	})
+	ba.specEditBtn.Importance = widget.LowImportance
+
 	ba.specSaveBtn = widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() {
 		activeSlug := ba.store.GetActiveProjectSlug()
 		if activeSlug != "" {
 			if err := ba.store.UpdateProjectSpecification(activeSlug, ba.specEntry.Text); err == nil {
 				ba.lastLoadedSpecText = ba.specEntry.Text
 				ba.specModified = false
+				ba.setSpecEditMode(false)
 				ba.specStatus.SetText("✔ Saved")
 			} else {
 				ba.specStatus.SetText("⚠️ Error saving")
@@ -262,16 +284,18 @@ func (ba *BacklogApp) buildUI() {
 	})
 	ba.specSaveBtn.Importance = widget.HighImportance
 
+	ba.specContentStack = container.NewStack(ba.specRichScroll, ba.specEntry)
+
 	specHeader := container.NewBorder(
 		nil, nil,
 		widget.NewLabelWithStyle("Composite Project Specification", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		container.NewHBox(ba.specStatus, ba.specSaveBtn),
+		container.NewHBox(ba.specStatus, ba.specPreviewBtn, ba.specEditBtn, ba.specSaveBtn),
 	)
 
 	specPanel := container.NewBorder(
 		container.NewVBox(specHeader, widget.NewSeparator()),
 		nil, nil, nil,
-		ba.specEntry,
+		ba.specContentStack,
 	)
 
 	rightTabs := container.NewAppTabs(
@@ -364,6 +388,52 @@ func (ba *BacklogApp) refreshTasks() {
 	}
 }
 
+func (ba *BacklogApp) setSpecEditMode(editing bool) {
+	ba.specEditMode = editing
+	if editing {
+		if ba.specRichScroll != nil {
+			ba.specRichScroll.Hide()
+		}
+		if ba.specEntry != nil {
+			ba.specEntry.Show()
+		}
+		if ba.specPreviewBtn != nil {
+			ba.specPreviewBtn.Importance = widget.LowImportance
+			ba.specPreviewBtn.Refresh()
+		}
+		if ba.specEditBtn != nil {
+			ba.specEditBtn.Importance = widget.HighImportance
+			ba.specEditBtn.Refresh()
+		}
+	} else {
+		if ba.specRichText != nil && ba.specEntry != nil {
+			specText := ba.specEntry.Text
+			if strings.TrimSpace(specText) == "" {
+				ba.specRichText.ParseMarkdown("*No composite specification defined yet. Click 'Edit' or update via MCP to define project architecture & scope.*")
+			} else {
+				ba.specRichText.ParseMarkdown(specText)
+			}
+		}
+		if ba.specEntry != nil {
+			ba.specEntry.Hide()
+		}
+		if ba.specRichScroll != nil {
+			ba.specRichScroll.Show()
+		}
+		if ba.specPreviewBtn != nil {
+			ba.specPreviewBtn.Importance = widget.HighImportance
+			ba.specPreviewBtn.Refresh()
+		}
+		if ba.specEditBtn != nil {
+			ba.specEditBtn.Importance = widget.LowImportance
+			ba.specEditBtn.Refresh()
+		}
+	}
+	if ba.specContentStack != nil {
+		ba.specContentStack.Refresh()
+	}
+}
+
 func (ba *BacklogApp) refreshSpec() {
 	if ba.specEntry == nil {
 		return
@@ -374,6 +444,9 @@ func (ba *BacklogApp) refreshSpec() {
 		ba.lastLoadedSpecText = ""
 		ba.specModified = false
 		ba.specEntry.SetText("")
+		if ba.specRichText != nil {
+			ba.specRichText.ParseMarkdown("*No project selected.*")
+		}
 		ba.specStatus.SetText("")
 		return
 	}
@@ -384,13 +457,26 @@ func (ba *BacklogApp) refreshSpec() {
 		targetSpec = p.Specification
 	}
 
+	updateRichText := func(text string) {
+		if ba.specRichText == nil {
+			return
+		}
+		if strings.TrimSpace(text) == "" {
+			ba.specRichText.ParseMarkdown("*No composite specification defined yet. Click 'Edit' or update via MCP to define project architecture & scope.*")
+		} else {
+			ba.specRichText.ParseMarkdown(text)
+		}
+	}
+
 	// 1. If switching project or first load
 	if ba.loadedSpecSlug != activeSlug {
 		ba.loadedSpecSlug = activeSlug
 		ba.lastLoadedSpecText = targetSpec
 		ba.specModified = false
 		ba.specEntry.SetText(targetSpec)
+		updateRichText(targetSpec)
 		ba.specStatus.SetText("")
+		ba.setSpecEditMode(false)
 		return
 	}
 
@@ -401,10 +487,12 @@ func (ba *BacklogApp) refreshSpec() {
 			ba.lastLoadedSpecText = targetSpec
 			ba.specModified = false
 			ba.specEntry.SetText(targetSpec)
+			updateRichText(targetSpec)
 			ba.specStatus.SetText("✔ Updated")
 		} else if ba.specEntry.Text == targetSpec {
 			ba.lastLoadedSpecText = targetSpec
 			ba.specModified = false
+			updateRichText(targetSpec)
 			ba.specStatus.SetText("✔ Synced")
 		}
 	}

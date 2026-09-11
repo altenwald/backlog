@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -234,7 +235,9 @@ func TestAppSpecRefreshLive(t *testing.T) {
 		store:   st,
 	}
 
-	// Initialize specEntry, status, and save button
+	// Initialize specEntry, rich text, buttons, and stack
+	bApp.specRichText = widget.NewRichTextFromMarkdown("")
+	bApp.specRichScroll = container.NewVScroll(container.NewPadded(bApp.specRichText))
 	bApp.specEntry = widget.NewMultiLineEntry()
 	bApp.specEntry.OnChanged = func(s string) {
 		if s != bApp.lastLoadedSpecText {
@@ -246,18 +249,27 @@ func TestAppSpecRefreshLive(t *testing.T) {
 		}
 	}
 	bApp.specStatus = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+
+	bApp.specPreviewBtn = widget.NewButtonWithIcon("Preview", theme.InfoIcon(), func() {
+		bApp.setSpecEditMode(false)
+	})
+	bApp.specEditBtn = widget.NewButtonWithIcon("Edit", theme.DocumentCreateIcon(), func() {
+		bApp.setSpecEditMode(true)
+	})
 	bApp.specSaveBtn = widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() {
 		activeSlug := bApp.store.GetActiveProjectSlug()
 		if activeSlug != "" {
 			if err := bApp.store.UpdateProjectSpecification(activeSlug, bApp.specEntry.Text); err == nil {
 				bApp.lastLoadedSpecText = bApp.specEntry.Text
 				bApp.specModified = false
+				bApp.setSpecEditMode(false)
 				bApp.specStatus.SetText("✔ Saved")
 			} else {
 				bApp.specStatus.SetText("⚠️ Error saving")
 			}
 		}
 	})
+	bApp.specContentStack = container.NewStack(bApp.specRichScroll, bApp.specEntry)
 
 	// Initial load
 	bApp.refreshSpec()
@@ -283,6 +295,11 @@ func TestAppSpecRefreshLive(t *testing.T) {
 	}
 
 	// 2. Simulate user typing in GUI
+	bApp.setSpecEditMode(true)
+	if !bApp.specEditMode {
+		t.Fatal("expected specEditMode to be true")
+	}
+
 	bApp.specEntry.SetText("# User Unsaved Draft")
 	if !bApp.specModified {
 		t.Fatal("expected specModified to be true after typing")
@@ -291,7 +308,13 @@ func TestAppSpecRefreshLive(t *testing.T) {
 		t.Fatalf("expected status '● Unsaved', got %q", bApp.specStatus.Text)
 	}
 
-	// 3. Simulate clicking Save in GUI
+	// 3. Switch to preview to inspect rich text
+	bApp.setSpecEditMode(false)
+	if bApp.specEditMode {
+		t.Fatal("expected specEditMode to be false")
+	}
+
+	// 4. Simulate clicking Save in GUI
 	bApp.specSaveBtn.OnTapped()
 	if bApp.specModified {
 		t.Fatal("expected specModified to be false after Save")
