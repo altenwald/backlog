@@ -447,7 +447,9 @@ func ShowSettingsDialog(parent fyne.Window, st *store.Store) {
 		copyBtn.SetText("✔ Copied!")
 		go func() {
 			time.Sleep(2 * time.Second)
-			copyBtn.SetText("Copy to clipboard")
+			fyne.Do(func() {
+				copyBtn.SetText("Copy to clipboard")
+			})
 		}()
 	})
 	copyBtn.Importance = widget.LowImportance

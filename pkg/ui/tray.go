@@ -51,7 +51,9 @@ func NewTrayManager(app fyne.App, window fyne.Window, st *store.Store, onAddClic
 	go func() {
 		for _, delay := range []time.Duration{50 * time.Millisecond, 150 * time.Millisecond, 300 * time.Millisecond, 600 * time.Millisecond, 1000 * time.Millisecond} {
 			time.Sleep(delay)
-			tm.Refresh()
+			fyne.Do(func() {
+				tm.Refresh()
+			})
 		}
 	}()
 
@@ -91,7 +93,13 @@ func (tm *TrayManager) Refresh() {
 		pSlug := p.Slug
 		pName := p.Name
 		pSum, _ := tm.store.GetSummary(pSlug)
-		label := fmt.Sprintf("%s (%d/%d)", pName, pSum.OpenTasks, pSum.TotalTasks)
+		openTasks := 0
+		totalTasks := 0
+		if pSum != nil {
+			openTasks = pSum.OpenTasks
+			totalTasks = pSum.TotalTasks
+		}
+		label := fmt.Sprintf("%s (%d/%d)", pName, openTasks, totalTasks)
 		if pSlug == activeSlug {
 			label = "● " + label
 		} else {

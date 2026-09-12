@@ -103,6 +103,7 @@ func (ba *BacklogApp) buildUI() {
 		ba.currentFilter = filter
 		ba.refreshTasks()
 	})
+	ba.currentFilter = ba.filterBar.CurrentFilter()
 
 	// Project selector
 	ba.projectSelect = widget.NewSelect([]string{}, func(selectedName string) {
@@ -141,6 +142,10 @@ func (ba *BacklogApp) buildUI() {
 			pName = p.Name
 		}
 		ShowDeleteProjectDialog(ba.window, pName, activeSlug, func() {
+			ba.loadedSpecSlug = ""
+			ba.lastLoadedSpecText = ""
+			ba.specModified = false
+			ba.selectedTaskID = ""
 			_ = ba.store.DeleteProject(activeSlug)
 		})
 	})
@@ -340,16 +345,34 @@ func (ba *BacklogApp) refreshProjects() {
 		}
 	}
 	ba.projectSelect.Options = options
-	if ba.projectSelect.Selected != selectedOption {
-		ba.projectSelect.Selected = selectedOption
-		ba.projectSelect.Refresh()
-	}
+	ba.projectSelect.Selected = selectedOption
+	ba.projectSelect.Refresh()
 }
 
 func (ba *BacklogApp) refreshTasks() {
 	activeSlug := ba.store.GetActiveProjectSlug()
+	if activeSlug == "" {
+		ba.displayedTasks = nil
+		ba.selectedTaskID = ""
+		ba.tasksList.UnselectAll()
+		ba.tasksList.Refresh()
+		ba.detailView.Clear()
+		if ba.burnUpChart != nil {
+			ba.burnUpChart.Update(nil)
+		}
+		return
+	}
+
 	tasks, err := ba.store.ListTasks(activeSlug, ba.currentFilter)
 	if err != nil {
+		ba.displayedTasks = nil
+		ba.selectedTaskID = ""
+		ba.tasksList.UnselectAll()
+		ba.tasksList.Refresh()
+		ba.detailView.Clear()
+		if ba.burnUpChart != nil {
+			ba.burnUpChart.Update(nil)
+		}
 		return
 	}
 
@@ -365,6 +388,7 @@ func (ba *BacklogApp) refreshTasks() {
 
 	if len(ba.displayedTasks) == 0 {
 		ba.selectedTaskID = ""
+		ba.tasksList.UnselectAll()
 		ba.detailView.Clear()
 		return
 	}
@@ -384,6 +408,7 @@ func (ba *BacklogApp) refreshTasks() {
 		ba.tasksList.Select(selectedIndex)
 	} else {
 		ba.selectedTaskID = ba.displayedTasks[0].ID
+		ba.tasksList.UnselectAll()
 		ba.tasksList.Select(0)
 		ba.detailView.ShowTask(ba.displayedTasks[0])
 	}
@@ -475,7 +500,6 @@ func (ba *BacklogApp) refreshSpec() {
 		ba.lastLoadedSpecText = targetSpec
 		ba.specModified = false
 		ba.specEntry.SetText(targetSpec)
-		updateRichText(targetSpec)
 		ba.specStatus.SetText("")
 		ba.setSpecEditMode(false)
 		return
@@ -515,7 +539,9 @@ func (ba *BacklogApp) refreshAll() {
 func (ba *BacklogApp) listenEvents() {
 	ch := ba.store.Subscribe()
 	for range ch {
-		ba.refreshAll()
+		fyne.Do(func() {
+			ba.refreshAll()
+		})
 	}
 }
 

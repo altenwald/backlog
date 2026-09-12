@@ -42,6 +42,10 @@ func (sb *SummaryBar) SetSelectedSize(size *model.Size) {
 
 func (sb *SummaryBar) Update(sum *model.Summary) {
 	if sum == nil {
+		sb.lastSummary = nil
+		sb.statusLabel.SetText("0 open / 0 tasks")
+		sb.chipsRow.Objects = nil
+		sb.chipsRow.Refresh()
 		return
 	}
 	sb.lastSummary = sum

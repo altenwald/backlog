@@ -26,6 +26,11 @@ func TestFilterBar(t *testing.T) {
 		t.Fatal("expected CanvasObject to not be nil")
 	}
 
+	curr := fb.CurrentFilter()
+	if curr.Done == nil || *curr.Done != false {
+		t.Fatalf("expected default Done filter to be false (hide completed), got %+v", curr.Done)
+	}
+
 	// 1. Update counts with summary
 	szM := model.SizeM
 	tier2 := model.Tier2

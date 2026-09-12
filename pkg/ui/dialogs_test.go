@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -327,5 +328,146 @@ func TestAppSpecRefreshLive(t *testing.T) {
 	if savedProj.Specification != "# User Unsaved Draft" {
 		t.Fatalf("expected store to have saved draft, got %q", savedProj.Specification)
 	}
+}
+
+func TestDeleteActiveProjectAndSwitchToEmptySpecProject(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "backlog-ui-crash-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	st, err := store.NewStore(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create legacy project p1 without specification
+	_, err = st.CreateProject("p1", "Project 1", "Legacy project without specification")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create project p2
+	_, err = st.CreateProject("p2", "Project 2", "Second project")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add tasks to p1 and p2
+	_, _ = st.AddTask("p1", model.Task{ID: "1", Title: "Task 1 in p1", Description: "Description 1"})
+	_, _ = st.AddTask("p2", model.Task{ID: "1", Title: "Task 1 in p2", Description: "Description 2"})
+
+	_ = st.SetActiveProject("p2")
+
+	a := test.NewApp()
+	w := a.NewWindow("Test")
+	bApp := &BacklogApp{
+		fyneApp: a,
+		window:  w,
+		store:   st,
+	}
+
+	bApp.buildUI()
+
+	// Scenario 1: Switch to p1 (legacy project without specification)
+	bApp.projectSelect.Selected = "Project 1"
+	bApp.projectSelect.OnChanged("Project 1")
+	bApp.refreshAll()
+
+	// Scenario 2: Switch back to p2, set active, then delete p2
+	bApp.projectSelect.Selected = "Project 2"
+	bApp.projectSelect.OnChanged("Project 2")
+	bApp.refreshAll()
+
+	// Delete p2 while it's active
+	err = st.DeleteProject("p2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bApp.refreshAll()
+
+	// Delete p1 as well (now zero projects)
+	err = st.DeleteProject("p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bApp.refreshAll()
+}
+
+func TestRealUserDataProjects(t *testing.T) {
+	home, _ := os.UserHomeDir()
+	realConfigDir := filepath.Join(home, ".config", "backlog")
+	if _, err := os.Stat(realConfigDir); os.IsNotExist(err) {
+		t.Skip("skipping test: ~/.config/backlog not found")
+	}
+
+	tmpDir, err := os.MkdirTemp("", "backlog-user-data-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Copy config and projects
+	_ = os.MkdirAll(filepath.Join(tmpDir, "projects"), 0755)
+	configData, _ := os.ReadFile(filepath.Join(realConfigDir, "config.json"))
+	_ = os.WriteFile(filepath.Join(tmpDir, "config.json"), configData, 0644)
+
+	entries, _ := os.ReadDir(filepath.Join(realConfigDir, "projects"))
+	for _, e := range entries {
+		data, _ := os.ReadFile(filepath.Join(realConfigDir, "projects", e.Name()))
+		_ = os.WriteFile(filepath.Join(tmpDir, "projects", e.Name()), data, 0644)
+	}
+
+	st, err := store.NewStore(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a := test.NewApp()
+	a.Settings().SetTheme(theme.DefaultTheme())
+	w := a.NewWindow("Real User Test")
+	bApp := &BacklogApp{
+		fyneApp: a,
+		window:  w,
+		store:   st,
+	}
+
+	bApp.buildUI()
+
+	// Switch to books
+	bApp.projectSelect.Selected = "Altenwald Books"
+	bApp.projectSelect.OnChanged("Altenwald Books")
+	bApp.refreshAll()
+
+	// Click through all tasks in books to render their markdown descriptions and resolutions
+	for i := range bApp.displayedTasks {
+		bApp.tasksList.Select(i)
+	}
+
+	// Switch to Conta
+	bApp.projectSelect.Selected = "Conta"
+	bApp.projectSelect.OnChanged("Conta")
+	bApp.refreshAll()
+
+	// Switch back to books (legacy, no spec)
+	bApp.projectSelect.Selected = "Altenwald Books"
+	bApp.projectSelect.OnChanged("Altenwald Books")
+	bApp.refreshAll()
+
+	// Create p2, set active, delete p2
+	_, err = st.CreateProject("p2", "p2", "Test Project 2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bApp.projectSelect.Selected = "p2"
+	bApp.projectSelect.OnChanged("p2")
+	bApp.refreshAll()
+
+	err = st.DeleteProject("p2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bApp.refreshAll()
 }
 

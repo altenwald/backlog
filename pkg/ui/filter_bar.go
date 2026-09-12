@@ -22,7 +22,9 @@ type FilterBar struct {
 }
 
 func NewFilterBar(onFilterChange func(filter model.TaskFilter)) *FilterBar {
+	doneFalse := false
 	fb := &FilterBar{
+		currentDone:    &doneFalse,
 		onFilterChange: onFilterChange,
 	}
 
@@ -42,6 +44,7 @@ func NewFilterBar(onFilterChange func(filter model.TaskFilter)) *FilterBar {
 		}
 		fb.emit()
 	})
+	fb.hideDoneCheck.Checked = true
 
 	btnAll := widget.NewButton("All", func() {
 		fb.currentTier = nil
@@ -115,6 +118,12 @@ func (fb *FilterBar) updateActiveButton(activeIndex int) {
 
 func (fb *FilterBar) UpdateCounts(sum *model.Summary) {
 	if sum == nil {
+		fb.buttons[0].SetText("All (0)")
+		fb.buttons[1].SetText("T1 (0)")
+		fb.buttons[2].SetText("T2 (0)")
+		fb.buttons[3].SetText("T3 (0)")
+		fb.buttons[4].SetText("T4 (0)")
+		fb.buttons[5].SetText("T5 (0)")
 		return
 	}
 	fb.buttons[0].SetText(fmt.Sprintf("All (%d)", sum.OpenTasks))
@@ -133,6 +142,15 @@ func (fb *FilterBar) emit() {
 			Done:   fb.currentDone,
 			Search: fb.currentSearch,
 		})
+	}
+}
+
+func (fb *FilterBar) CurrentFilter() model.TaskFilter {
+	return model.TaskFilter{
+		Tier:   fb.currentTier,
+		Size:   fb.currentSize,
+		Done:   fb.currentDone,
+		Search: fb.currentSearch,
 	}
 }
 
