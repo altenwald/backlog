@@ -21,7 +21,7 @@ type Backend interface {
 	GetTopPriorities(slug string, limit int) ([]model.Task, error)
 	ListTasks(slug string, filter model.TaskFilter) ([]model.Task, error)
 	AddTask(slug string, task model.Task) (*model.Task, error)
-	UpdateTask(slug string, task model.Task) (*model.Task, error)
+	UpdateTask(slug string, task model.TaskUpdate) (*model.Task, error)
 	CompleteTask(slug string, taskID string, done bool, resolution string) (*model.Task, error)
 	AssignTask(slug string, taskID string, assignee string) (*model.Task, error)
 	DeleteTask(slug string, taskID string) error
@@ -86,7 +86,7 @@ func (b *storeBackend) AddTask(slug string, task model.Task) (*model.Task, error
 	return b.st.AddTask(slug, task)
 }
 
-func (b *storeBackend) UpdateTask(slug string, task model.Task) (*model.Task, error) {
+func (b *storeBackend) UpdateTask(slug string, task model.TaskUpdate) (*model.Task, error) {
 	return b.st.UpdateTask(slug, task)
 }
 
@@ -185,7 +185,7 @@ func (b *clientBackend) AddTask(slug string, task model.Task) (*model.Task, erro
 	return b.c.AddTask(slug, task)
 }
 
-func (b *clientBackend) UpdateTask(slug string, task model.Task) (*model.Task, error) {
+func (b *clientBackend) UpdateTask(slug string, task model.TaskUpdate) (*model.Task, error) {
 	return b.c.UpdateTask(slug, task)
 }
 

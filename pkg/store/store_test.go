@@ -91,7 +91,7 @@ func TestTaskHierarchyAndCascadeDelete(t *testing.T) {
 	}
 
 	// 6. Test cycle detection on update: try to set root's parent to grandchild
-	_, err = st.UpdateTask(projSlug, model.Task{
+	_, err = st.UpdateTask(projSlug, model.TaskUpdate{
 		ID:       root.ID,
 		ParentID: grandchild.ID,
 	})
@@ -100,7 +100,7 @@ func TestTaskHierarchyAndCascadeDelete(t *testing.T) {
 	}
 
 	// 7. Test self-parenting prevention
-	_, err = st.UpdateTask(projSlug, model.Task{
+	_, err = st.UpdateTask(projSlug, model.TaskUpdate{
 		ID:       root.ID,
 		ParentID: root.ID,
 	})
@@ -216,7 +216,7 @@ func TestTaskDependenciesAndBlocking(t *testing.T) {
 	}
 
 	// 6. Test circular dependency prevention in UpdateTask
-	_, err = st.UpdateTask(projSlug, model.Task{
+	_, err = st.UpdateTask(projSlug, model.TaskUpdate{
 		ID:        t1.ID,
 		DependsOn: []string{t2.ID}, // t2 depends on t1, t1 depends on t2 -> circular!
 	})

@@ -14,46 +14,27 @@ import (
 	"github.com/altenwald/backlog/pkg/model"
 )
 
-// Tier colors - calibrated for high contrast in both dark & light themes
+// Semantic colors are used as quiet tints, rather than solid blocks.
 func TierColor(t model.Tier) color.Color {
 	switch t {
 	case model.Tier1:
-		return color.NRGBA{R: 225, G: 65, B: 55, A: 255} // Blocker Red
+		return color.NRGBA{R: 180, G: 65, B: 65, A: 255}
 	case model.Tier2:
-		return color.NRGBA{R: 225, G: 140, B: 25, A: 255} // Important Orange
+		return color.NRGBA{R: 158, G: 111, B: 40, A: 255}
 	case model.Tier3:
-		return color.NRGBA{R: 20, G: 145, B: 155, A: 255} // Visual Teal
+		return color.NRGBA{R: 45, G: 128, B: 125, A: 255}
 	case model.Tier4:
-		return color.NRGBA{R: 120, G: 115, B: 165, A: 255} // Internal Slate
-	case model.Tier5:
-		return color.NRGBA{R: 125, G: 135, B: 145, A: 255} // Future Gray
+		return color.NRGBA{R: 108, G: 105, B: 145, A: 255}
 	default:
-		return color.NRGBA{R: 110, G: 110, B: 110, A: 255}
+		return color.NRGBA{R: 100, G: 115, B: 135, A: 255}
 	}
 }
 
-// Size colors - calibrated for readability
 func SizeColor(s model.Size) color.Color {
-	switch s {
-	case model.SizeXS:
-		return color.NRGBA{R: 60, G: 130, B: 215, A: 255}
-	case model.SizeS:
-		return color.NRGBA{R: 45, G: 110, B: 195, A: 255}
-	case model.SizeM:
-		return color.NRGBA{R: 35, G: 95, B: 180, A: 255}
-	case model.SizeL:
-		return color.NRGBA{R: 25, G: 75, B: 160, A: 255}
-	case model.SizeXL:
-		return color.NRGBA{R: 15, G: 55, B: 140, A: 255}
-	default:
-		return color.NRGBA{R: 80, G: 80, B: 80, A: 255}
-	}
+	return color.NRGBA{R: 90, G: 110, B: uint8(125 + s.Weight()), A: 255}
 }
 
-// AssigneeBadgeColor returns a rich purple/indigo color for agent & user badges
-func AssigneeBadgeColor() color.Color {
-	return color.NRGBA{R: 120, G: 75, B: 210, A: 255}
-}
+func AssigneeBadgeColor() color.Color { return color.NRGBA{R: 100, G: 115, B: 135, A: 255} }
 
 func FormatAssignee(assignee string) string {
 	name := strings.TrimSpace(assignee)
@@ -67,11 +48,12 @@ func FormatAssignee(assignee string) string {
 func MakeBadge(text string, bg color.Color, fg color.Color) fyne.CanvasObject {
 	lbl := canvas.NewText(text, fg)
 	lbl.TextStyle = fyne.TextStyle{Bold: true}
-	lbl.TextSize = 10.5
+	lbl.TextSize = 11
 	lbl.Alignment = fyne.TextAlignCenter
 
-	box := canvas.NewRectangle(bg)
-	box.CornerRadius = 4
+	r, g, b, _ := bg.RGBA()
+	box := canvas.NewRectangle(color.NRGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 32})
+	box.CornerRadius = 5
 
 	return container.NewStack(box, container.NewPadded(lbl))
 }
@@ -91,17 +73,17 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 	check.Checked = task.Done
 
 	// Badges column (fixed width)
-	sizeBadge := MakeBadge(string(task.Size), SizeColor(task.Size), color.White)
-	tierBadge := MakeBadge(task.Tier.ShortLabel(), TierColor(task.Tier), color.White)
+	sizeBadge := MakeBadge(string(task.Size), SizeColor(task.Size), theme.Color(theme.ColorNameForeground))
+	tierBadge := MakeBadge(task.Tier.ShortLabel(), TierColor(task.Tier), theme.Color(theme.ColorNameForeground))
 	badgesCol := container.NewVBox(sizeBadge, tierBadge)
 
 	// Title
 	titleText := task.Title
 	if task.ParentID != "" {
-		titleText = "↳ " + titleText
+		titleText = "Subtask: " + titleText
 	}
 	if task.Done {
-		titleText = "✓ " + titleText
+		titleText = "Completed: " + titleText
 	}
 	title := widget.NewLabelWithStyle(titleText, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	title.Wrapping = fyne.TextWrapWord
@@ -120,7 +102,7 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 		}
 
 		if resTrimmed != "" {
-			resHeading := widget.NewLabelWithStyle("✔ Resolution / Implementation Details:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+			resHeading := widget.NewLabelWithStyle("Resolution", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 			resContent := RenderMarkdown(resTrimmed)
 
 			resBg := canvas.NewRectangle(theme.ButtonColor())
@@ -179,18 +161,18 @@ func NewTaskRow(task model.Task, callbacks TaskCardCallbacks) fyne.CanvasObject 
 
 	var parentBadge fyne.CanvasObject
 	if task.ParentID != "" {
-		parentBadge = MakeBadge("↳ #"+task.ParentID, color.NRGBA{R: 55, G: 75, B: 105, A: 255}, color.White)
+		parentBadge = MakeBadge("Parent #"+task.ParentID, color.NRGBA{R: 55, G: 75, B: 105, A: 255}, theme.Color(theme.ColorNameForeground))
 	}
 
 	var depBadge fyne.CanvasObject
 	if len(task.DependsOn) > 0 {
-		depBadge = MakeBadge("⛔ #"+strings.Join(task.DependsOn, ",#"), color.NRGBA{R: 155, G: 60, B: 60, A: 255}, color.White)
+		depBadge = MakeBadge("Depends on #"+strings.Join(task.DependsOn, ",#"), color.NRGBA{R: 155, G: 60, B: 60, A: 255}, theme.Color(theme.ColorNameForeground))
 	}
 
 	// Assignee Badge (Option A: distinctive pill)
 	var assigneeBadge fyne.CanvasObject
 	if task.Assignee != "" {
-		assigneeBadge = MakeBadge(FormatAssignee(task.Assignee), AssigneeBadgeColor(), color.White)
+		assigneeBadge = MakeBadge(FormatAssignee(task.Assignee), AssigneeBadgeColor(), theme.Color(theme.ColorNameForeground))
 	}
 
 	// Action buttons

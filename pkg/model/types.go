@@ -94,6 +94,20 @@ type Task struct {
 	TerminatedAt *time.Time `json:"terminated_at,omitempty"`
 }
 
+// TaskUpdate contains editable fields. A nil Description or DependsOn leaves
+// the stored value unchanged; an empty value explicitly clears it.
+type TaskUpdate struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title,omitempty"`
+	Description *string  `json:"description,omitempty"`
+	ParentID    string   `json:"parent_id,omitempty"`
+	DependsOn   []string `json:"depends_on,omitzero"`
+	Size        Size     `json:"size,omitempty"`
+	Tier        Tier     `json:"tier,omitempty"`
+	Resolution  string   `json:"resolution,omitempty"`
+	Assignee    string   `json:"assignee,omitempty"`
+}
+
 // IsBlocked returns true if any dependency task is not completed.
 func (t Task) IsBlocked(taskMap map[string]Task) bool {
 	for _, depID := range t.DependsOn {

@@ -243,7 +243,7 @@ func TestAppSpecRefreshLive(t *testing.T) {
 	bApp.specEntry.OnChanged = func(s string) {
 		if s != bApp.lastLoadedSpecText {
 			bApp.specModified = true
-			bApp.specStatus.SetText("● Unsaved")
+			bApp.specStatus.SetText("Unsaved changes")
 		} else {
 			bApp.specModified = false
 			bApp.specStatus.SetText("")
@@ -264,7 +264,7 @@ func TestAppSpecRefreshLive(t *testing.T) {
 				bApp.lastLoadedSpecText = bApp.specEntry.Text
 				bApp.specModified = false
 				bApp.setSpecEditMode(false)
-				bApp.specStatus.SetText("✔ Saved")
+				bApp.specStatus.SetText("Saved")
 			} else {
 				bApp.specStatus.SetText("⚠️ Error saving")
 			}
@@ -291,8 +291,8 @@ func TestAppSpecRefreshLive(t *testing.T) {
 	if bApp.specEntry.Text != newExternalSpec {
 		t.Fatalf("expected specEntry to reflect external update %q, got %q", newExternalSpec, bApp.specEntry.Text)
 	}
-	if bApp.specStatus.Text != "✔ Updated" {
-		t.Fatalf("expected status '✔ Updated', got %q", bApp.specStatus.Text)
+	if bApp.specStatus.Text != "Updated" {
+		t.Fatalf("expected status 'Updated', got %q", bApp.specStatus.Text)
 	}
 
 	// 2. Simulate user typing in GUI
@@ -305,8 +305,8 @@ func TestAppSpecRefreshLive(t *testing.T) {
 	if !bApp.specModified {
 		t.Fatal("expected specModified to be true after typing")
 	}
-	if bApp.specStatus.Text != "● Unsaved" {
-		t.Fatalf("expected status '● Unsaved', got %q", bApp.specStatus.Text)
+	if bApp.specStatus.Text != "Unsaved changes" {
+		t.Fatalf("expected status 'Unsaved changes', got %q", bApp.specStatus.Text)
 	}
 
 	// 3. Switch to preview to inspect rich text
@@ -320,8 +320,8 @@ func TestAppSpecRefreshLive(t *testing.T) {
 	if bApp.specModified {
 		t.Fatal("expected specModified to be false after Save")
 	}
-	if bApp.specStatus.Text != "✔ Saved" {
-		t.Fatalf("expected status '✔ Saved', got %q", bApp.specStatus.Text)
+	if bApp.specStatus.Text != "Saved" {
+		t.Fatalf("expected status 'Saved', got %q", bApp.specStatus.Text)
 	}
 
 	savedProj, _ := st.GetProject("test-proj")
@@ -470,4 +470,3 @@ func TestRealUserDataProjects(t *testing.T) {
 	}
 	bApp.refreshAll()
 }
-

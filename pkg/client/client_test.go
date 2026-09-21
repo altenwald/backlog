@@ -118,7 +118,7 @@ func TestClientEndToEnd(t *testing.T) {
 	}
 
 	// 7. UpdateTask
-	updatedT1, err := c.UpdateTask("api-client", model.Task{
+	updatedT1, err := c.UpdateTask("api-client", model.TaskUpdate{
 		ID:    t1.ID,
 		Title: "Setup DB Updated",
 	})

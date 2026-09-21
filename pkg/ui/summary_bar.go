@@ -5,7 +5,6 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
 )
@@ -23,7 +22,7 @@ func NewSummaryBar(onSizeChange func(size *model.Size)) *SummaryBar {
 	statusLabel := widget.NewLabelWithStyle("0 open / 0 tasks", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	chipsRow := container.NewHBox()
 
-	row := container.NewHBox(statusLabel, layout.NewSpacer(), chipsRow)
+	row := container.NewVBox(statusLabel, chipsRow)
 
 	return &SummaryBar{
 		container:    row,
@@ -50,7 +49,7 @@ func (sb *SummaryBar) Update(sum *model.Summary) {
 	}
 	sb.lastSummary = sum
 
-	sb.statusLabel.SetText(fmt.Sprintf("%d/%d open", sum.OpenTasks, sum.TotalTasks))
+	sb.statusLabel.SetText(fmt.Sprintf("%d open · %d total", sum.OpenTasks, sum.TotalTasks))
 
 	sb.chipsRow.Objects = nil
 	for _, sz := range []model.Size{model.SizeXL, model.SizeL, model.SizeM, model.SizeS, model.SizeXS} {

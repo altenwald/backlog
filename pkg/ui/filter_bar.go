@@ -18,6 +18,7 @@ type FilterBar struct {
 	currentSize    *model.Size
 	currentDone    *bool
 	currentSearch  string
+	lastSummary    *model.Summary
 	onFilterChange func(filter model.TaskFilter)
 }
 
@@ -29,7 +30,7 @@ func NewFilterBar(onFilterChange func(filter model.TaskFilter)) *FilterBar {
 	}
 
 	fb.searchEntry = widget.NewEntry()
-	fb.searchEntry.SetPlaceHolder("🔍 Search tasks...")
+	fb.searchEntry.SetPlaceHolder("Search tasks…")
 	fb.searchEntry.OnChanged = func(s string) {
 		fb.currentSearch = s
 		fb.emit()
@@ -42,6 +43,7 @@ func NewFilterBar(onFilterChange func(filter model.TaskFilter)) *FilterBar {
 		} else {
 			fb.currentDone = nil
 		}
+		fb.UpdateCounts(fb.lastSummary)
 		fb.emit()
 	})
 	fb.hideDoneCheck.Checked = true
@@ -89,6 +91,7 @@ func NewFilterBar(onFilterChange func(filter model.TaskFilter)) *FilterBar {
 	})
 
 	fb.buttons = []*widget.Button{btnAll, btnT1, btnT2, btnT3, btnT4, btnT5}
+	fb.updateActiveButton(0)
 
 	tierRow := container.NewGridWithColumns(6,
 		btnAll, btnT1, btnT2, btnT3, btnT4, btnT5,
@@ -110,13 +113,14 @@ func (fb *FilterBar) updateActiveButton(activeIndex int) {
 		if i == activeIndex {
 			btn.Importance = widget.HighImportance
 		} else {
-			btn.Importance = widget.MediumImportance
+			btn.Importance = widget.LowImportance
 		}
 		btn.Refresh()
 	}
 }
 
 func (fb *FilterBar) UpdateCounts(sum *model.Summary) {
+	fb.lastSummary = sum
 	if sum == nil {
 		fb.buttons[0].SetText("All (0)")
 		fb.buttons[1].SetText("T1 (0)")
@@ -126,12 +130,15 @@ func (fb *FilterBar) UpdateCounts(sum *model.Summary) {
 		fb.buttons[5].SetText("T5 (0)")
 		return
 	}
-	fb.buttons[0].SetText(fmt.Sprintf("All (%d)", sum.OpenTasks))
-	fb.buttons[1].SetText(fmt.Sprintf("T1 (%d)", sum.TierCounts[model.Tier1]))
-	fb.buttons[2].SetText(fmt.Sprintf("T2 (%d)", sum.TierCounts[model.Tier2]))
-	fb.buttons[3].SetText(fmt.Sprintf("T3 (%d)", sum.TierCounts[model.Tier3]))
-	fb.buttons[4].SetText(fmt.Sprintf("T4 (%d)", sum.TierCounts[model.Tier4]))
-	fb.buttons[5].SetText(fmt.Sprintf("T5 (%d)", sum.TierCounts[model.Tier5]))
+	total, counts := sum.OpenTasks, sum.TierCounts
+	if fb.currentDone == nil {
+		total, counts = sum.TotalTasks, sum.TotalTierCounts
+	}
+	fb.buttons[0].SetText(fmt.Sprintf("All (%d)", total))
+	for i := 1; i < len(fb.buttons); i++ {
+		fb.buttons[i].SetText(fmt.Sprintf("T%d (%d)", i, counts[model.Tier(i)]))
+	}
+
 }
 
 func (fb *FilterBar) emit() {

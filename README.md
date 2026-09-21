@@ -13,7 +13,7 @@
 * **Empty State Guidance**: Clear visual cues when initializing a new project.
 
 ### ⛔ Dependencies, Blocking Detection & Cycles
-* **Task Prerequisites (`depends_on`)**: Declare task dependencies to enforce strict execution order.
+* **Task Prerequisites (`depends_on`)**: Declare task dependencies to enforce strict execution order. The desktop list groups dependent tasks under their first visible prerequisite, with indentation and vector branch indicators. Tasks with multiple prerequisites appear once, retaining all dependency references in their details. Filters keep matching tasks visible even when their prerequisites are hidden.
 * **Automatic Blocked State**: Tasks remain marked as blocked (`⛔ [blocked by #X]`) until all prerequisite tasks are completed.
 * **Cycle Prevention**: Circular dependencies (e.g. A → B → A) are detected and rejected.
 

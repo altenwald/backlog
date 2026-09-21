@@ -421,3 +421,101 @@ func TestMCPDeprecateAndSpecTools(t *testing.T) {
 		t.Fatalf("expected get_project_spec to contain Composite Spec, got %s", string(getSpecRespBytes))
 	}
 }
+
+// Exercise the actual MCP request and persisted state, including the HTTP hop
+// where an empty dependency list used to disappear during JSON encoding.
+func TestMCPUpdateTaskPartialFields(t *testing.T) {
+	for _, transport := range []string{"store", "http"} {
+		t.Run(transport, func(t *testing.T) {
+			cases := []struct {
+				name             string
+				args             map[string]any
+				wantDescription  string
+				wantDependencies []string
+			}{
+				{"title only", map[string]any{"title": "Renamed"}, "Original description", []string{"1"}},
+				{"resolution only", map[string]any{"resolution": "Moved to Dymmer"}, "Original description", []string{"1"}},
+				{"replace description", map[string]any{"description": "New description"}, "New description", []string{"1"}},
+				{"clear description", map[string]any{"description": ""}, "", []string{"1"}},
+				{"clear dependencies with none", map[string]any{"depends_on": "none"}, "Original description", nil},
+				{"clear dependencies with clear", map[string]any{"depends_on": "clear"}, "Original description", nil},
+				{"clear dependencies with array", map[string]any{"depends_on": []string{}}, "Original description", nil},
+				{"replace dependencies", map[string]any{"depends_on": "2"}, "Original description", []string{"2"}},
+				{"replace dependencies with array", map[string]any{"depends_on": []string{"2"}}, "Original description", []string{"2"}},
+			}
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					dir := t.TempDir()
+					st, err := store.NewStore(dir)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if _, err := st.CreateProject("test", "Test", ""); err != nil {
+						t.Fatal(err)
+					}
+					for _, title := range []string{"Dependency", "Replacement"} {
+						if _, err := st.AddTask("test", model.Task{Title: title, Size: model.SizeS, Tier: model.Tier1}); err != nil {
+							t.Fatal(err)
+						}
+					}
+					task, err := st.AddTask("test", model.Task{Title: "Original", Description: "Original description", DependsOn: []string{"1"}, Size: model.SizeM, Tier: model.Tier2})
+					if err != nil {
+						t.Fatal(err)
+					}
+					var be Backend = NewStoreBackend(st)
+					if transport == "http" {
+						r := chi.NewRouter()
+						NewAPIHandler(st).RegisterRoutes(r)
+						ts := httptest.NewServer(r)
+						defer ts.Close()
+						be = NewClientBackend(client.NewClient(ts.URL))
+					}
+					tc.args["project"] = "test"
+					tc.args["task_id"] = task.ID
+					msg, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": "update_task", "arguments": tc.args}})
+					if err != nil {
+						t.Fatal(err)
+					}
+					resp := NewMCPServerWithBackend(be).HandleMessage(context.Background(), msg)
+					data, err := json.Marshal(resp)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !strings.Contains(string(data), "updated in 'test'") {
+						t.Fatalf("update failed: %s", data)
+					}
+					// Reopen the store to verify the changes survived persistence.
+					reloaded, err := store.NewStore(dir)
+					if err != nil {
+						t.Fatal(err)
+					}
+					tasks, err := reloaded.ListTasks("test", model.TaskFilter{})
+					if err != nil {
+						t.Fatal(err)
+					}
+					var got *model.Task
+					for i := range tasks {
+						if tasks[i].ID == task.ID {
+							got = &tasks[i]
+						}
+					}
+					if got == nil {
+						t.Fatal("updated task missing")
+					}
+					if got.Description != tc.wantDescription {
+						t.Errorf("description = %q, want %q", got.Description, tc.wantDescription)
+					}
+					if strings.Join(got.DependsOn, ",") != strings.Join(tc.wantDependencies, ",") {
+						t.Errorf("dependencies = %v, want %v", got.DependsOn, tc.wantDependencies)
+					}
+					if title, ok := tc.args["title"]; ok && got.Title != title {
+						t.Errorf("title = %q, want %q", got.Title, title)
+					}
+					if resolution, ok := tc.args["resolution"]; ok && got.Resolution != resolution {
+						t.Errorf("resolution = %q, want %q", got.Resolution, resolution)
+					}
+				})
+			}
+		})
+	}
+}

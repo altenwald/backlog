@@ -560,7 +560,7 @@ func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPSe
 			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
 			mcp.WithString("task_id", mcp.Description("ID of task to update"), mcp.Required()),
 			mcp.WithString("title", mcp.Description("New title")),
-			mcp.WithString("description", mcp.Description("New description")),
+			mcp.WithString("description", mcp.Description("New description; omit to keep unchanged, or use an empty string to clear")),
 			mcp.WithString("parent_id", mcp.Description("New parent task ID (or 'none'/'0' to detach/unparent)")),
 			mcp.WithString("depends_on", mcp.Description("New comma-separated dependency task IDs (or 'none'/'clear' to clear dependencies)")),
 			mcp.WithString("size", mcp.Description("New effort size ('XS', 'S', 'M', 'L', 'XL')")),
@@ -587,19 +587,19 @@ func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPSe
 				return mcp.NewToolResultError("parameter 'project' is required"), nil
 			}
 
-			update := model.Task{ID: taskID}
+			update := model.TaskUpdate{ID: taskID}
 			if t := req.GetString("title", ""); t != "" {
 				update.Title = t
 			}
-			if d := req.GetString("description", ""); d != "" {
-				update.Description = d
+			if d, ok := req.GetArguments()["description"].(string); ok {
+				update.Description = &d
 			}
 			if p := req.GetString("parent_id", ""); p != "" {
 				update.ParentID = p
 			}
 			if rawArgs := req.GetArguments(); rawArgs != nil {
 				if deps, ok := rawArgs["depends_on"].([]any); ok {
-					var list []string
+					list := make([]string, 0)
 					for _, d := range deps {
 						if s, ok := d.(string); ok && strings.TrimSpace(s) != "" {
 							list = append(list, strings.TrimSpace(s))

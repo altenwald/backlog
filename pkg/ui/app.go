@@ -28,9 +28,11 @@ type BacklogApp struct {
 	currentFilter model.TaskFilter
 
 	tasksList      *widget.List
+	tasksEmpty     *fyne.Container
 	detailView     *TaskDetailView
 	burnUpChart    *BurnUpChart
 	displayedTasks []model.Task
+	taskPlacements map[string]taskPlacement
 	selectedTaskID string
 
 	specEntry          *widget.Entry
@@ -53,12 +55,13 @@ func GetAppIconResource() fyne.Resource {
 
 func NewBacklogApp(st *store.Store) *BacklogApp {
 	a := app.NewWithID("com.altenwald.backlog")
+	a.Settings().SetTheme(NewBacklogTheme())
 	iconRes := GetAppIconResource()
 	a.SetIcon(iconRes)
 
 	w := a.NewWindow("Backlog")
 	w.SetIcon(iconRes)
-	w.Resize(fyne.NewSize(1080, 720))
+	w.Resize(fyne.NewSize(1180, 780))
 
 	bApp := &BacklogApp{
 		fyneApp: a,
@@ -122,7 +125,7 @@ func (ba *BacklogApp) buildUI() {
 		}
 	})
 
-	newProjectBtn := widget.NewButton("📁 + Project", func() {
+	newProjectBtn := widget.NewButtonWithIcon("New project", theme.FolderNewIcon(), func() {
 		ShowNewProjectDialog(ba.window, func(slug, name, desc string) {
 			if _, err := ba.store.CreateProject(slug, name, desc); err == nil {
 				_ = ba.store.SetActiveProject(slug)
@@ -149,16 +152,16 @@ func (ba *BacklogApp) buildUI() {
 			_ = ba.store.DeleteProject(activeSlug)
 		})
 	})
-	deleteProjectBtn.Importance = widget.DangerImportance
+	deleteProjectBtn.Importance = widget.LowImportance
 
-	addTaskBtn := widget.NewButton("➕ New Task", func() {
+	addTaskBtn := widget.NewButtonWithIcon("New task", theme.ContentAddIcon(), func() {
 		ba.showAddTask()
 	})
 	addTaskBtn.Importance = widget.HighImportance
 
 	headerLeft := container.NewHBox(
-		widget.NewLabelWithStyle("Project:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		container.NewGridWrap(fyne.NewSize(150, 36), ba.projectSelect),
+		widget.NewLabelWithStyle("Backlog", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		container.NewGridWrap(fyne.NewSize(210, 38), ba.projectSelect),
 		newProjectBtn,
 		deleteProjectBtn,
 	)
@@ -181,7 +184,8 @@ func (ba *BacklogApp) buildUI() {
 				return
 			}
 			item := obj.(*TaskRowItem)
-			item.Bind(ba.displayedTasks[id])
+			task := ba.displayedTasks[id]
+			item.bindPlacement(task, ba.taskPlacements[task.ID])
 		},
 	)
 
@@ -195,15 +199,18 @@ func (ba *BacklogApp) buildUI() {
 
 	// Left section (List pane)
 	leftHeader := container.NewVBox(
-		header,
-		widget.NewSeparator(),
 		ba.summaryBar.CanvasObject(),
-		widget.NewSeparator(),
 		ba.filterBar.CanvasObject(),
 		widget.NewSeparator(),
 	)
 
-	leftPane := container.NewBorder(leftHeader, nil, nil, nil, ba.tasksList)
+	emptyTitle := widget.NewLabelWithStyle("No tasks to show", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	emptyHint := widget.NewLabel("Try another filter or create a new task.")
+	emptyHint.Alignment = fyne.TextAlignCenter
+	emptyHint.Importance = widget.LowImportance
+	ba.tasksEmpty = container.NewCenter(container.NewVBox(widget.NewIcon(theme.ListIcon()), emptyTitle, emptyHint))
+	ba.tasksEmpty.Hide()
+	leftPane := container.NewPadded(container.NewBorder(leftHeader, nil, nil, nil, container.NewStack(ba.tasksList, ba.tasksEmpty)))
 
 	// Right section (Tabs: 1. Tasks & Details, 2. Specification Text Editor)
 	detailCallbacks := TaskDetailCallbacks{
@@ -222,7 +229,12 @@ func (ba *BacklogApp) buildUI() {
 		OnEdit: func(task model.Task) {
 			activeSlug := ba.store.GetActiveProjectSlug()
 			ShowEditTaskDialog(ba.window, task, func(updated model.Task) {
-				if saved, err := ba.store.UpdateTask(activeSlug, updated); err == nil {
+				if saved, err := ba.store.UpdateTask(activeSlug, model.TaskUpdate{
+					ID: updated.ID, Title: updated.Title, Description: &updated.Description,
+					ParentID: updated.ParentID, DependsOn: updated.DependsOn,
+					Size: updated.Size, Tier: updated.Tier,
+					Resolution: updated.Resolution, Assignee: updated.Assignee,
+				}); err == nil {
 					ba.detailView.ShowTask(*saved)
 				}
 			})
@@ -237,13 +249,6 @@ func (ba *BacklogApp) buildUI() {
 	ba.burnUpChart = NewBurnUpChart()
 	ba.detailView = NewTaskDetailView(detailCallbacks)
 
-	// Tab 1: Tasks overview & detail view
-	rightSplit := container.NewVSplit(
-		container.NewPadded(ba.burnUpChart.Container),
-		container.NewPadded(ba.detailView.Container),
-	)
-	rightSplit.SetOffset(0.36)
-
 	// Tab 2: Composite Project Specification editor & rich text preview
 	ba.specRichText = widget.NewRichTextFromMarkdown("")
 	ba.specRichText.Wrapping = fyne.TextWrapWord
@@ -256,7 +261,7 @@ func (ba *BacklogApp) buildUI() {
 	ba.specEntry.OnChanged = func(s string) {
 		if s != ba.lastLoadedSpecText {
 			ba.specModified = true
-			ba.specStatus.SetText("● Unsaved")
+			ba.specStatus.SetText("Unsaved changes")
 		} else {
 			ba.specModified = false
 			ba.specStatus.SetText("")
@@ -282,9 +287,9 @@ func (ba *BacklogApp) buildUI() {
 				ba.lastLoadedSpecText = ba.specEntry.Text
 				ba.specModified = false
 				ba.setSpecEditMode(false)
-				ba.specStatus.SetText("✔ Saved")
+				ba.specStatus.SetText("Saved")
 			} else {
-				ba.specStatus.SetText("⚠️ Error saving")
+				ba.specStatus.SetText("Could not save")
 			}
 		}
 	})
@@ -292,9 +297,8 @@ func (ba *BacklogApp) buildUI() {
 
 	ba.specContentStack = container.NewStack(ba.specRichScroll, ba.specEntry)
 
-	specHeader := container.NewBorder(
-		nil, nil,
-		widget.NewLabelWithStyle("Composite Project Specification", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+	specHeader := container.NewVBox(
+		widget.NewLabelWithStyle("Project specification", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		container.NewHBox(ba.specStatus, ba.specPreviewBtn, ba.specEditBtn, ba.specSaveBtn),
 	)
 
@@ -305,15 +309,16 @@ func (ba *BacklogApp) buildUI() {
 	)
 
 	rightTabs := container.NewAppTabs(
-		container.NewTabItemWithIcon("Tasks & Details", theme.ListIcon(), rightSplit),
+		container.NewTabItemWithIcon("Task", theme.ListIcon(), container.NewPadded(ba.detailView.Container)),
+		container.NewTabItemWithIcon("Progress", theme.HistoryIcon(), container.NewPadded(ba.burnUpChart.Container)),
 		container.NewTabItemWithIcon("Specification", theme.DocumentIcon(), container.NewPadded(specPanel)),
 	)
 
 	// Master-detail Split view
 	split := container.NewHSplit(leftPane, rightTabs)
-	split.SetOffset(0.44)
+	split.SetOffset(0.40)
 
-	ba.window.SetContent(split)
+	ba.window.SetContent(container.NewPadded(container.NewBorder(container.NewVBox(header, widget.NewSeparator()), nil, nil, nil, split)))
 
 	// Setup Tray
 	ba.tray = NewTrayManager(ba.fyneApp, ba.window, ba.store, func() {
@@ -350,6 +355,15 @@ func (ba *BacklogApp) refreshProjects() {
 }
 
 func (ba *BacklogApp) refreshTasks() {
+	defer func() {
+		if ba.tasksEmpty != nil {
+			if len(ba.displayedTasks) == 0 {
+				ba.tasksEmpty.Show()
+			} else {
+				ba.tasksEmpty.Hide()
+			}
+		}
+	}()
 	activeSlug := ba.store.GetActiveProjectSlug()
 	if activeSlug == "" {
 		ba.displayedTasks = nil
@@ -376,7 +390,7 @@ func (ba *BacklogApp) refreshTasks() {
 		return
 	}
 
-	ba.displayedTasks = tasks
+	ba.displayedTasks, ba.taskPlacements = arrangeTaskOutline(tasks)
 	ba.tasksList.Refresh()
 
 	// Update Burn-up chart with full project scope
@@ -513,12 +527,12 @@ func (ba *BacklogApp) refreshSpec() {
 			ba.specModified = false
 			ba.specEntry.SetText(targetSpec)
 			updateRichText(targetSpec)
-			ba.specStatus.SetText("✔ Updated")
+			ba.specStatus.SetText("Updated")
 		} else if ba.specEntry.Text == targetSpec {
 			ba.lastLoadedSpecText = targetSpec
 			ba.specModified = false
 			updateRichText(targetSpec)
-			ba.specStatus.SetText("✔ Synced")
+			ba.specStatus.SetText("Synced")
 		}
 	}
 }

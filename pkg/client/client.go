@@ -210,7 +210,7 @@ func (c *Client) AddTask(projectSlug string, task model.Task) (*model.Task, erro
 	return &created, err
 }
 
-func (c *Client) UpdateTask(projectSlug string, task model.Task) (*model.Task, error) {
+func (c *Client) UpdateTask(projectSlug string, task model.TaskUpdate) (*model.Task, error) {
 	body, _ := json.Marshal(task)
 	u := fmt.Sprintf("%s/api/projects/%s/tasks/%s", c.baseURL, url.PathEscape(projectSlug), url.PathEscape(task.ID))
 	req, err := http.NewRequest(http.MethodPut, u, bytes.NewReader(body))

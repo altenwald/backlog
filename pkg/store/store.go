@@ -588,7 +588,7 @@ func (s *Store) CompleteTask(projectSlug string, taskID string, done bool, resol
 	return nil, fmt.Errorf("task ID '%s' not found in project '%s'", taskID, projectSlug)
 }
 
-func (s *Store) UpdateTask(projectSlug string, task model.Task) (*model.Task, error) {
+func (s *Store) UpdateTask(projectSlug string, task model.TaskUpdate) (*model.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -608,7 +608,9 @@ func (s *Store) UpdateTask(projectSlug string, task model.Task) (*model.Task, er
 			if task.Title != "" {
 				p.Tasks[i].Title = task.Title
 			}
-			p.Tasks[i].Description = task.Description
+			if task.Description != nil {
+				p.Tasks[i].Description = *task.Description
+			}
 			if task.ParentID != "" {
 				if task.ParentID == task.ID {
 					return nil, errors.New("a task cannot be its own parent")

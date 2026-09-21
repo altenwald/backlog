@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
 )
@@ -36,7 +37,7 @@ type BurnUpChart struct {
 func NewBurnUpChart() *BurnUpChart {
 	bc := &BurnUpChart{}
 
-	bc.headerLabel = widget.NewLabelWithStyle("📈 Burn-Up Progress", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	bc.headerLabel = widget.NewLabelWithStyle("Project progress", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
 	// Blue indicator for Total Scope
 	scopeBox := canvas.NewRectangle(color.NRGBA{R: 70, G: 130, B: 240, A: 255})
@@ -53,7 +54,7 @@ func NewBurnUpChart() *BurnUpChart {
 	legendDone := container.NewHBox(container.NewCenter(doneIcon), bc.doneLabel)
 
 	// Status badge wrapper
-	initialBadge := MakeBadge("0/0 (0%)", color.NRGBA{R: 60, G: 65, B: 75, A: 255}, color.White)
+	initialBadge := MakeBadge("0/0 (0%)", color.NRGBA{R: 60, G: 65, B: 75, A: 255}, theme.Color(theme.ColorNameForeground))
 	bc.statsWrap = container.NewStack(initialBadge)
 
 	topRight := container.NewHBox(
@@ -64,20 +65,23 @@ func NewBurnUpChart() *BurnUpChart {
 	)
 
 	// Subtitle row that displays real-time point details on hover
-	bc.statusLabel = widget.NewLabelWithStyle("Hover over any milestone to inspect date & task details", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+	bc.statusLabel = widget.NewLabelWithStyle("Hover over the chart to inspect a day", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
 
+	bc.statusLabel.Wrapping = fyne.TextWrapWord
+	bc.statusLabel.Importance = widget.LowImportance
 	topBar := container.NewVBox(
-		container.NewBorder(nil, nil, bc.headerLabel, topRight),
+		bc.headerLabel,
+		topRight,
 		bc.statusLabel,
 	)
 
 	bc.chartCanvas = newBurnUpPlotWidget(func(pt *BurnUpPoint) {
 		if pt == nil {
-			bc.statusLabel.SetText("Hover over any milestone to inspect date & task details")
+			bc.statusLabel.SetText("Hover over the chart to inspect a day")
 			bc.statusLabel.TextStyle = fyne.TextStyle{Italic: true}
 		} else {
 			pending := pt.Total - pt.Completed
-			bc.statusLabel.SetText(fmt.Sprintf("📅 %s:   ● Total Scope: %d   ·   ● Completed: %d   ·   ⏳ Pending: %d", pt.DateLabel, pt.Total, pt.Completed, pending))
+			bc.statusLabel.SetText(fmt.Sprintf("%s · %d total · %d completed · %d pending", pt.DateLabel, pt.Total, pt.Completed, pending))
 			bc.statusLabel.TextStyle = fyne.TextStyle{Bold: true}
 		}
 		bc.statusLabel.Refresh()
@@ -91,7 +95,7 @@ func NewBurnUpChart() *BurnUpChart {
 		bc.chartCanvas,
 	)
 
-	bg := canvas.NewRectangle(color.NRGBA{R: 24, G: 28, B: 36, A: 255})
+	bg := canvas.NewRectangle(color.NRGBA{R: 128, G: 128, B: 128, A: 12})
 	bg.CornerRadius = 8
 
 	bc.Container = container.NewStack(bg, container.NewPadded(chartCard))
@@ -124,7 +128,7 @@ func (bc *BurnUpChart) Update(tasks []model.Task) {
 		badgeColor = color.NRGBA{R: 45, G: 90, B: 150, A: 255}
 	}
 
-	newBadge := MakeBadge(badgeText, badgeColor, color.White)
+	newBadge := MakeBadge(badgeText, badgeColor, theme.Color(theme.ColorNameForeground))
 	bc.statsWrap.Objects = []fyne.CanvasObject{newBadge}
 	bc.statsWrap.Refresh()
 
@@ -358,8 +362,8 @@ func (r *burnUpRenderer) Layout(size fyne.Size) {
 	}
 
 	// Horizontal grid lines and Y-axis labels
-	gridColor := color.NRGBA{R: 44, G: 50, B: 62, A: 255}
-	textMuted := color.NRGBA{R: 130, G: 138, B: 155, A: 255}
+	gridColor := theme.Color(theme.ColorNameSeparator)
+	textMuted := theme.Color(theme.ColorNamePlaceHolder)
 
 	steps := 3
 	for i := 0; i <= steps; i++ {
@@ -470,6 +474,12 @@ func (r *burnUpRenderer) Layout(size fyne.Size) {
 			offsetY := float32(6)
 			if cyDone == cyScope {
 				offsetY = 16
+			}
+			if cyDone+offsetY+12 > padTop+plotH {
+				offsetY = -16
+				if cyDone == cyScope {
+					offsetY = -30
+				}
 			}
 			txtDone.Move(fyne.NewPos(cx-12, cyDone+offsetY))
 			txtDone.Resize(fyne.NewSize(24, 12))

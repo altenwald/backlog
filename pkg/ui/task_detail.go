@@ -50,7 +50,7 @@ func NewTaskDetailView(callbacks TaskDetailCallbacks) *TaskDetailView {
 	// Placeholder when no task is selected
 	icon := widget.NewIcon(theme.DocumentIcon())
 	msg := widget.NewLabelWithStyle("Select a task to inspect details", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	hint := widget.NewLabelWithStyle("Use ↑ / ↓ arrow keys to quickly navigate between tasks", fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
+	hint := widget.NewLabelWithStyle("Choose a task from the list to see its context and next steps.", fyne.TextAlignCenter, fyne.TextStyle{})
 	dv.placeholder = container.NewCenter(container.NewVBox(icon, msg, hint))
 
 	// Title
@@ -58,7 +58,7 @@ func NewTaskDetailView(callbacks TaskDetailCallbacks) *TaskDetailView {
 	dv.titleLabel.Wrapping = fyne.TextWrapWord
 
 	// Action buttons
-	dv.toggleDoneBtn = widget.NewButtonWithIcon("Mark as Done", theme.ConfirmIcon(), func() {
+	dv.toggleDoneBtn = widget.NewButtonWithIcon("Complete", theme.ConfirmIcon(), func() {
 		if dv.currentTask != nil && dv.callbacks.OnToggleDone != nil {
 			dv.callbacks.OnToggleDone(dv.currentTask.ID, !dv.currentTask.Done)
 		}
@@ -69,7 +69,7 @@ func NewTaskDetailView(callbacks TaskDetailCallbacks) *TaskDetailView {
 			dv.callbacks.OnDeprecate(dv.currentTask.ID, !dv.currentTask.Deprecated)
 		}
 	})
-	dv.deprecateBtn.Importance = widget.WarningImportance
+	dv.deprecateBtn.Importance = widget.LowImportance
 
 	dv.editBtn = widget.NewButtonWithIcon("Edit", theme.DocumentCreateIcon(), func() {
 		if dv.currentTask != nil && dv.callbacks.OnEdit != nil {
@@ -83,19 +83,21 @@ func NewTaskDetailView(callbacks TaskDetailCallbacks) *TaskDetailView {
 			dv.callbacks.OnDelete(dv.currentTask.ID)
 		}
 	})
-	dv.deleteBtn.Importance = widget.DangerImportance
+	dv.deleteBtn.Importance = widget.LowImportance
 
-	btnBar := container.NewHBox(dv.toggleDoneBtn, dv.deprecateBtn, dv.editBtn, dv.deleteBtn, layout.NewSpacer())
+	btnBar := container.New(layout.NewRowWrapLayout(), dv.toggleDoneBtn, dv.editBtn, dv.deprecateBtn, dv.deleteBtn)
 
 	// Badges row & dates
-	dv.badgesRow = container.NewHBox()
-	dv.timeLabel = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+	dv.badgesRow = container.New(layout.NewRowWrapLayout())
+	dv.timeLabel = widget.NewLabel("")
+	dv.timeLabel.Wrapping = fyne.TextWrapWord
+	dv.timeLabel.Importance = widget.LowImportance
 
 	// Body content
 	dv.descContent = container.NewVBox()
 
 	dv.resContent = container.NewVBox()
-	resHeading := widget.NewLabelWithStyle("✔ Resolution & Implementation Notes", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	resHeading := widget.NewLabelWithStyle("Resolution", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	resBg := canvas.NewRectangle(theme.ButtonColor())
 	resBg.CornerRadius = 8
 	dv.resBox = container.NewStack(resBg, container.NewPadded(container.NewVBox(resHeading, dv.resContent)))
@@ -106,17 +108,16 @@ func NewTaskDetailView(callbacks TaskDetailCallbacks) *TaskDetailView {
 		widget.NewSeparator(),
 		dv.resBox,
 	)
-	scroll := container.NewVScroll(container.NewPadded(scrollableBody))
 
 	topArea := container.NewVBox(
-		dv.titleLabel,
+		container.NewThemeOverride(dv.titleLabel, typographyTheme{Theme: fyne.CurrentApp().Settings().Theme(), textSize: 20, inset: 9}),
 		dv.badgesRow,
 		dv.timeLabel,
 		btnBar,
 		widget.NewSeparator(),
 	)
 
-	dv.contentWrap = container.NewBorder(topArea, nil, nil, nil, scroll)
+	dv.contentWrap = container.NewStack(container.NewVScroll(container.NewPadded(container.NewVBox(topArea, scrollableBody))))
 	dv.contentWrap.Hide()
 
 	dv.Container = container.NewStack(dv.placeholder, dv.contentWrap)
@@ -142,21 +143,21 @@ func (dv *TaskDetailView) ShowTask(task model.Task) {
 
 	// Title & action buttons
 	if task.Done {
-		dv.toggleDoneBtn.SetText("Reopen Task")
+		dv.toggleDoneBtn.SetText("Reopen")
 		dv.toggleDoneBtn.SetIcon(theme.ViewRefreshIcon())
 		dv.toggleDoneBtn.Importance = widget.LowImportance
 	} else {
-		dv.toggleDoneBtn.SetText("Mark as Done")
+		dv.toggleDoneBtn.SetText("Complete")
 		dv.toggleDoneBtn.SetIcon(theme.ConfirmIcon())
 		dv.toggleDoneBtn.Importance = widget.HighImportance
 	}
 
 	if task.Deprecated {
-		dv.deprecateBtn.SetText("Undeprecate")
+		dv.deprecateBtn.SetText("Restore")
 		dv.deprecateBtn.Importance = widget.LowImportance
 	} else {
 		dv.deprecateBtn.SetText("Deprecate")
-		dv.deprecateBtn.Importance = widget.WarningImportance
+		dv.deprecateBtn.Importance = widget.LowImportance
 	}
 
 	dv.titleLabel.SetText(fmt.Sprintf("#%s: %s", task.ID, task.Title))
@@ -164,26 +165,27 @@ func (dv *TaskDetailView) ShowTask(task model.Task) {
 	// Badges
 	dv.badgesRow.Objects = nil
 	if task.Deprecated {
-		deprecateBadge := MakeBadge("⚠️ DEPRECATED", color.NRGBA{R: 220, G: 110, B: 15, A: 255}, color.White)
+		deprecateBadge := MakeBadge("Deprecated", color.NRGBA{R: 220, G: 110, B: 15, A: 255}, theme.Color(theme.ColorNameForeground))
 		dv.badgesRow.Add(deprecateBadge)
 	}
-	tierBadge := MakeBadge(task.Tier.Label(), TierColor(task.Tier), color.White)
-	sizeBadge := MakeBadge(string(task.Size), SizeColor(task.Size), color.White)
+	tierBadge := MakeBadge(task.Tier.Label(), TierColor(task.Tier), theme.Color(theme.ColorNameForeground))
+	sizeBadge := MakeBadge(string(task.Size), SizeColor(task.Size), theme.Color(theme.ColorNameForeground))
 	dv.badgesRow.Add(tierBadge)
 	dv.badgesRow.Add(sizeBadge)
 
 	if task.ParentID != "" {
-		parentBadge := MakeBadge("↳ Parent #"+task.ParentID, color.NRGBA{R: 55, G: 75, B: 105, A: 255}, color.White)
+		parentBadge := MakeBadge("Parent #"+task.ParentID, color.NRGBA{R: 55, G: 75, B: 105, A: 255}, theme.Color(theme.ColorNameForeground))
 		dv.badgesRow.Add(parentBadge)
 	}
 
 	if len(task.DependsOn) > 0 {
-		depBadge := MakeBadge("⛔ Depends on #"+strings.Join(task.DependsOn, ", #"), color.NRGBA{R: 160, G: 65, B: 65, A: 255}, color.White)
-		dv.badgesRow.Add(depBadge)
+		for _, id := range task.DependsOn {
+			dv.badgesRow.Add(container.NewHBox(widget.NewIcon(DependencyIcon()), MakeBadge("Depends on #"+id, TierColor(model.Tier5), theme.Color(theme.ColorNameForeground))))
+		}
 	}
 
 	if task.Assignee != "" {
-		assignBadge := MakeBadge(FormatAssignee(task.Assignee), AssigneeBadgeColor(), color.White)
+		assignBadge := MakeBadge(FormatAssignee(task.Assignee), AssigneeBadgeColor(), theme.Color(theme.ColorNameForeground))
 		dv.badgesRow.Add(assignBadge)
 	}
 	dv.badgesRow.Refresh()
@@ -191,13 +193,13 @@ func (dv *TaskDetailView) ShowTask(task model.Task) {
 	// Timestamps
 	var timeParts []string
 	if !task.InsertedAt.IsZero() {
-		timeParts = append(timeParts, fmt.Sprintf("Inserted: %s", task.InsertedAt.Format("2006-01-02 15:04")))
+		timeParts = append(timeParts, fmt.Sprintf("Created %s", task.InsertedAt.Format("2006-01-02 15:04")))
 	}
 	if !task.UpdatedAt.IsZero() && !task.UpdatedAt.Equal(task.InsertedAt) {
-		timeParts = append(timeParts, fmt.Sprintf("Updated: %s", task.UpdatedAt.Format("2006-01-02 15:04")))
+		timeParts = append(timeParts, fmt.Sprintf("Updated %s", task.UpdatedAt.Format("2006-01-02 15:04")))
 	}
 	if task.TerminatedAt != nil && !task.TerminatedAt.IsZero() {
-		timeParts = append(timeParts, fmt.Sprintf("Completed: %s", task.TerminatedAt.Format("2006-01-02 15:04")))
+		timeParts = append(timeParts, fmt.Sprintf("Completed %s", task.TerminatedAt.Format("2006-01-02 15:04")))
 	}
 	dv.timeLabel.SetText(strings.Join(timeParts, "   ·   "))
 
@@ -207,7 +209,7 @@ func (dv *TaskDetailView) ShowTask(task model.Task) {
 	if descTrimmed != "" {
 		dv.descContent.Add(RenderMarkdown(descTrimmed))
 	} else {
-		dv.descContent.Add(widget.NewLabelWithStyle("(No description provided)", fyne.TextAlignLeading, fyne.TextStyle{Italic: true}))
+		dv.descContent.Add(widget.NewLabelWithStyle("(No description provided)", fyne.TextAlignLeading, fyne.TextStyle{}))
 	}
 	dv.descContent.Refresh()
 

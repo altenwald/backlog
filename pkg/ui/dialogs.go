@@ -177,7 +177,7 @@ func ShowEditTaskDialog(parent fyne.Window, task model.Task, onSave func(task mo
 			}
 		}
 
-		var dependsOn []string
+		dependsOn := make([]string, 0)
 		for _, part := range strings.Split(dependsEntry.Text, ",") {
 			if s := strings.TrimSpace(part); s != "" {
 				dependsOn = append(dependsOn, s)
@@ -334,7 +334,7 @@ func ShowAboutDialog(parent fyne.Window) {
 	)
 	linksCenter := container.NewCenter(linksBox)
 
-	licenseHeading := widget.NewLabelWithStyle("📜 MIT License", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	licenseHeading := widget.NewLabelWithStyle("MIT License", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
 	const mitLicenseMarkdown = `Copyright (c) 2026 Altenwald / Manuel Rubio
 
@@ -444,7 +444,7 @@ func ShowSettingsDialog(parent fyne.Window, st *store.Store) {
 	var copyBtn *widget.Button
 	copyBtn = widget.NewButtonWithIcon("Copy to clipboard", theme.ContentCopyIcon(), func() {
 		win.Clipboard().SetContent(server.BacklogCoreInstructions)
-		copyBtn.SetText("✔ Copied!")
+		copyBtn.SetText("Copied")
 		go func() {
 			time.Sleep(2 * time.Second)
 			fyne.Do(func() {
@@ -455,7 +455,7 @@ func ShowSettingsDialog(parent fyne.Window, st *store.Store) {
 	copyBtn.Importance = widget.LowImportance
 
 	coreLockLabel := widget.NewLabelWithStyle(
-		"🔒 Core instructions — read-only (defines the Backlog tool protocol)",
+		"Core instructions — read-only",
 		fyne.TextAlignLeading,
 		fyne.TextStyle{Italic: true},
 	)
@@ -490,7 +490,7 @@ func ShowSettingsDialog(parent fyne.Window, st *store.Store) {
 	resetBtn.Importance = widget.LowImportance
 
 	customLabel := widget.NewLabelWithStyle(
-		"✏️ Custom instructions — appended after core (editable)",
+		"Custom instructions",
 		fyne.TextAlignLeading,
 		fyne.TextStyle{Italic: true},
 	)

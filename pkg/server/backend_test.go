@@ -58,7 +58,7 @@ func TestStoreBackend(t *testing.T) {
 	}
 
 	// 5. UpdateTask, AssignTask, CompleteTask
-	_, err = be.UpdateTask("backend-proj", model.Task{ID: task.ID, Title: "Task 1 Updated"})
+	_, err = be.UpdateTask("backend-proj", model.TaskUpdate{ID: task.ID, Title: "Task 1 Updated"})
 	if err != nil {
 		t.Fatalf("UpdateTask failed: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestClientBackend(t *testing.T) {
 	}
 
 	// UpdateTask (0% in clientBackend)
-	_, err = be.UpdateTask("cb-proj", model.Task{ID: task.ID, Title: "CB Task Updated"})
+	_, err = be.UpdateTask("cb-proj", model.TaskUpdate{ID: task.ID, Title: "CB Task Updated"})
 	if err != nil {
 		t.Fatalf("UpdateTask via clientBackend failed: %v", err)
 	}

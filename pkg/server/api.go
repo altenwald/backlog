@@ -236,7 +236,7 @@ func (h *APIHandler) updateTask(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	id := chi.URLParam(r, "id")
 
-	var task model.Task
+	var task model.TaskUpdate
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
 		errorResponse(w, http.StatusBadRequest, "invalid json body")
 		return
