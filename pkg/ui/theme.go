@@ -7,8 +7,9 @@ import (
 	"fyne.io/fyne/v2/theme"
 )
 
-// BacklogTheme keeps native fonts and vector icons, with a restrained palette
-// that follows the system's light/dark preference.
+// BacklogTheme uses the semi-monospaced Recursive reading font (with Fyne's
+// emoji fallback) and vector icons, with a restrained palette that follows the
+// system's light/dark preference.
 type BacklogTheme struct{ fyne.Theme }
 
 func NewBacklogTheme() fyne.Theme { return &BacklogTheme{theme.DefaultTheme()} }
@@ -47,6 +48,13 @@ func (t *BacklogTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant
 		return pair(0xC6E0DD, 0x3C6565)
 	}
 	return t.Theme.Color(name, variant)
+}
+
+func (t *BacklogTheme) Font(style fyne.TextStyle) fyne.Resource {
+	if style.Monospace || style.Symbol {
+		return t.Theme.Font(style)
+	}
+	return specFont(style)
 }
 
 func (t *BacklogTheme) Size(name fyne.ThemeSizeName) float32 {

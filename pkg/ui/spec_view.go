@@ -118,7 +118,7 @@ func NewSpecView(st *store.Store, win fyne.Window) *SpecView {
 
 	split := container.NewHSplit(sidebar, editor)
 	split.SetOffset(0.28)
-	v.Container = container.NewThemeOverride(split, newSpecTheme(fyne.CurrentApp().Settings().Theme()))
+	v.Container = split
 
 	v.setEditMode(false)
 	v.updateButtons()
