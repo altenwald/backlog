@@ -88,7 +88,11 @@ func (s *Store) loadAll() error {
 	// Load config
 	configPath := filepath.Join(s.dataDir, "config.json")
 	if data, err := os.ReadFile(configPath); err == nil {
-		_ = json.Unmarshal(data, &s.config)
+		if err := json.Unmarshal(data, &s.config); err != nil {
+			return fmt.Errorf("cannot parse %s: %w (fix or move the file away; it was left untouched)", configPath, err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("cannot read %s: %w", configPath, err)
 	}
 
 	// Load projects
@@ -103,12 +107,18 @@ func (s *Store) loadAll() error {
 			filePath := filepath.Join(projectsDir, entry.Name())
 			data, err := os.ReadFile(filePath)
 			if err != nil {
-				continue
+				return fmt.Errorf("cannot read %s: %w", filePath, err)
 			}
+			// Refuse to start rather than silently hiding a project: a later
+			// CreateProject with the same slug would overwrite the file.
 			var p model.Project
-			if err := json.Unmarshal(data, &p); err == nil && p.Slug != "" {
-				s.projects[p.Slug] = &p
+			if err := json.Unmarshal(data, &p); err != nil {
+				return fmt.Errorf("cannot parse %s: %w (fix or move the file away; it was left untouched)", filePath, err)
 			}
+			if p.Slug == "" {
+				return fmt.Errorf("cannot load %s: missing project slug", filePath)
+			}
+			s.projects[p.Slug] = &p
 		}
 	}
 
@@ -128,7 +138,7 @@ func (s *Store) saveConfig() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(configPath, data, 0644)
+	return writeFileAtomic(configPath, data, 0644)
 }
 
 func (s *Store) saveProject(p *model.Project) error {
@@ -138,7 +148,7 @@ func (s *Store) saveProject(p *model.Project) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filePath, data, 0644)
+	return writeFileAtomic(filePath, data, 0644)
 }
 
 func (s *Store) Subscribe() <-chan Event {
