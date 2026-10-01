@@ -556,12 +556,12 @@ func TestUpdateProjectSpecification(t *testing.T) {
 		t.Fatalf("UpdateProjectSpecification failed: %v", err)
 	}
 
-	p, err := st.GetProject(projSlug)
+	spec, err := st.GetProjectSpecification(projSlug)
 	if err != nil {
-		t.Fatalf("GetProject failed: %v", err)
+		t.Fatalf("GetProjectSpecification failed: %v", err)
 	}
-	if p.Specification != specContent {
-		t.Fatalf("expected spec %q, got %q", specContent, p.Specification)
+	if spec != specContent {
+		t.Fatalf("expected spec %q, got %q", specContent, spec)
 	}
 
 	// Verify persistence
@@ -569,8 +569,8 @@ func TestUpdateProjectSpecification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to reload store: %v", err)
 	}
-	p2, err := st2.GetProject(projSlug)
-	if err != nil || p2.Specification != specContent {
-		t.Fatalf("reloaded project spec mismatch: %v / %+v", err, p2)
+	spec2, err := st2.GetProjectSpecification(projSlug)
+	if err != nil || spec2 != specContent {
+		t.Fatalf("reloaded project spec mismatch: %v / %q", err, spec2)
 	}
 }

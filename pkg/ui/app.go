@@ -2,7 +2,6 @@ package ui
 
 import (
 	_ "embed"
-	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -35,18 +34,7 @@ type BacklogApp struct {
 	taskPlacements map[string]taskPlacement
 	selectedTaskID string
 
-	specEntry          *widget.Entry
-	specRichText       *widget.RichText
-	specRichScroll     *container.Scroll
-	specContentStack   *fyne.Container
-	specPreviewBtn     *widget.Button
-	specEditBtn        *widget.Button
-	specSaveBtn        *widget.Button
-	specStatus         *widget.Label
-	specEditMode       bool
-	loadedSpecSlug     string
-	lastLoadedSpecText string
-	specModified       bool
+	specView *SpecView
 }
 
 func GetAppIconResource() fyne.Resource {
@@ -111,14 +99,12 @@ func (ba *BacklogApp) buildUI() {
 	// Project selector
 	ba.projectSelect = widget.NewSelect([]string{}, func(selectedName string) {
 		activeSlug := ba.store.GetActiveProjectSlug()
-		// Auto-save specification of previous project ONLY IF it was modified by user in GUI
-		if activeSlug != "" && ba.loadedSpecSlug == activeSlug && ba.specEntry != nil && ba.specModified {
-			_ = ba.store.UpdateProjectSpecification(activeSlug, ba.specEntry.Text)
-			ba.specModified = false
-		}
 		for _, p := range ba.store.ListProjects() {
 			if (p.Name == selectedName || p.Slug == selectedName) && p.Slug != activeSlug {
-				ba.loadedSpecSlug = ""
+				// Keep unsaved edits of the current section before switching project
+				if ba.specView != nil {
+					ba.specView.Save()
+				}
 				_ = ba.store.SetActiveProject(p.Slug)
 				break
 			}
@@ -145,9 +131,6 @@ func (ba *BacklogApp) buildUI() {
 			pName = p.Name
 		}
 		ShowDeleteProjectDialog(ba.window, pName, activeSlug, func() {
-			ba.loadedSpecSlug = ""
-			ba.lastLoadedSpecText = ""
-			ba.specModified = false
 			ba.selectedTaskID = ""
 			_ = ba.store.DeleteProject(activeSlug)
 		})
@@ -249,69 +232,13 @@ func (ba *BacklogApp) buildUI() {
 	ba.burnUpChart = NewBurnUpChart()
 	ba.detailView = NewTaskDetailView(detailCallbacks)
 
-	// Tab 2: Composite Project Specification editor & rich text preview
-	ba.specRichText = widget.NewRichTextFromMarkdown("")
-	ba.specRichText.Wrapping = fyne.TextWrapWord
-	ba.specRichScroll = container.NewVScroll(container.NewPadded(ba.specRichText))
-
-	ba.specEntry = widget.NewMultiLineEntry()
-	ba.specEntry.Wrapping = fyne.TextWrapWord
-	ba.specEntry.TextStyle = fyne.TextStyle{Monospace: true}
-	ba.specEntry.SetPlaceHolder("Write the composite project specification here...\n\nDescribe the project's purpose, scope, and technical design with explicit references to ticket IDs (e.g. #1, #2).\nTickets not referenced in this document are considered out of scope or deprecated.")
-	ba.specEntry.OnChanged = func(s string) {
-		if s != ba.lastLoadedSpecText {
-			ba.specModified = true
-			ba.specStatus.SetText("Unsaved changes")
-		} else {
-			ba.specModified = false
-			ba.specStatus.SetText("")
-		}
-	}
-
-	ba.specStatus = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
-
-	ba.specPreviewBtn = widget.NewButtonWithIcon("Preview", theme.InfoIcon(), func() {
-		ba.setSpecEditMode(false)
-	})
-	ba.specPreviewBtn.Importance = widget.HighImportance
-
-	ba.specEditBtn = widget.NewButtonWithIcon("Edit", theme.DocumentCreateIcon(), func() {
-		ba.setSpecEditMode(true)
-	})
-	ba.specEditBtn.Importance = widget.LowImportance
-
-	ba.specSaveBtn = widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() {
-		activeSlug := ba.store.GetActiveProjectSlug()
-		if activeSlug != "" {
-			if err := ba.store.UpdateProjectSpecification(activeSlug, ba.specEntry.Text); err == nil {
-				ba.lastLoadedSpecText = ba.specEntry.Text
-				ba.specModified = false
-				ba.setSpecEditMode(false)
-				ba.specStatus.SetText("Saved")
-			} else {
-				ba.specStatus.SetText("Could not save")
-			}
-		}
-	})
-	ba.specSaveBtn.Importance = widget.HighImportance
-
-	ba.specContentStack = container.NewStack(ba.specRichScroll, ba.specEntry)
-
-	specHeader := container.NewVBox(
-		widget.NewLabelWithStyle("Project specification", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		container.NewHBox(ba.specStatus, ba.specPreviewBtn, ba.specEditBtn, ba.specSaveBtn),
-	)
-
-	specPanel := container.NewBorder(
-		container.NewVBox(specHeader, widget.NewSeparator()),
-		nil, nil, nil,
-		ba.specContentStack,
-	)
+	// Specification: section index plus a per-section preview/editor
+	ba.specView = NewSpecView(ba.store, ba.window)
 
 	rightTabs := container.NewAppTabs(
 		container.NewTabItemWithIcon("Task", theme.ListIcon(), container.NewPadded(ba.detailView.Container)),
 		container.NewTabItemWithIcon("Progress", theme.HistoryIcon(), container.NewPadded(ba.burnUpChart.Container)),
-		container.NewTabItemWithIcon("Specification", theme.DocumentIcon(), container.NewPadded(specPanel)),
+		container.NewTabItemWithIcon("Specification", theme.DocumentIcon(), container.NewPadded(ba.specView.Container)),
 	)
 
 	// Master-detail Split view
@@ -428,112 +355,9 @@ func (ba *BacklogApp) refreshTasks() {
 	}
 }
 
-func (ba *BacklogApp) setSpecEditMode(editing bool) {
-	ba.specEditMode = editing
-	if editing {
-		if ba.specRichScroll != nil {
-			ba.specRichScroll.Hide()
-		}
-		if ba.specEntry != nil {
-			ba.specEntry.Show()
-		}
-		if ba.specPreviewBtn != nil {
-			ba.specPreviewBtn.Importance = widget.LowImportance
-			ba.specPreviewBtn.Refresh()
-		}
-		if ba.specEditBtn != nil {
-			ba.specEditBtn.Importance = widget.HighImportance
-			ba.specEditBtn.Refresh()
-		}
-	} else {
-		if ba.specRichText != nil && ba.specEntry != nil {
-			specText := ba.specEntry.Text
-			if strings.TrimSpace(specText) == "" {
-				ba.specRichText.ParseMarkdown("*No composite specification defined yet. Click 'Edit' or update via MCP to define project architecture & scope.*")
-			} else {
-				ba.specRichText.ParseMarkdown(specText)
-			}
-		}
-		if ba.specEntry != nil {
-			ba.specEntry.Hide()
-		}
-		if ba.specRichScroll != nil {
-			ba.specRichScroll.Show()
-		}
-		if ba.specPreviewBtn != nil {
-			ba.specPreviewBtn.Importance = widget.HighImportance
-			ba.specPreviewBtn.Refresh()
-		}
-		if ba.specEditBtn != nil {
-			ba.specEditBtn.Importance = widget.LowImportance
-			ba.specEditBtn.Refresh()
-		}
-	}
-	if ba.specContentStack != nil {
-		ba.specContentStack.Refresh()
-	}
-}
-
 func (ba *BacklogApp) refreshSpec() {
-	if ba.specEntry == nil {
-		return
-	}
-	activeSlug := ba.store.GetActiveProjectSlug()
-	if activeSlug == "" {
-		ba.loadedSpecSlug = ""
-		ba.lastLoadedSpecText = ""
-		ba.specModified = false
-		ba.specEntry.SetText("")
-		if ba.specRichText != nil {
-			ba.specRichText.ParseMarkdown("*No project selected.*")
-		}
-		ba.specStatus.SetText("")
-		return
-	}
-
-	p, err := ba.store.GetProject(activeSlug)
-	targetSpec := ""
-	if err == nil && p != nil {
-		targetSpec = p.Specification
-	}
-
-	updateRichText := func(text string) {
-		if ba.specRichText == nil {
-			return
-		}
-		if strings.TrimSpace(text) == "" {
-			ba.specRichText.ParseMarkdown("*No composite specification defined yet. Click 'Edit' or update via MCP to define project architecture & scope.*")
-		} else {
-			ba.specRichText.ParseMarkdown(text)
-		}
-	}
-
-	// 1. If switching project or first load
-	if ba.loadedSpecSlug != activeSlug {
-		ba.loadedSpecSlug = activeSlug
-		ba.lastLoadedSpecText = targetSpec
-		ba.specModified = false
-		ba.specEntry.SetText(targetSpec)
-		ba.specStatus.SetText("")
-		ba.setSpecEditMode(false)
-		return
-	}
-
-	// 2. Same project: check if specification was updated in store (e.g. by MCP, CLI, or API)
-	if targetSpec != ba.lastLoadedSpecText {
-		// Only update if user does not have uncommitted/unsaved local typing in the GUI
-		if !ba.specModified || ba.specEntry.Text == ba.lastLoadedSpecText {
-			ba.lastLoadedSpecText = targetSpec
-			ba.specModified = false
-			ba.specEntry.SetText(targetSpec)
-			updateRichText(targetSpec)
-			ba.specStatus.SetText("Updated")
-		} else if ba.specEntry.Text == targetSpec {
-			ba.lastLoadedSpecText = targetSpec
-			ba.specModified = false
-			updateRichText(targetSpec)
-			ba.specStatus.SetText("Synced")
-		}
+	if ba.specView != nil {
+		ba.specView.Refresh()
 	}
 }
 

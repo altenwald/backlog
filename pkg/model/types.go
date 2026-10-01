@@ -151,20 +151,21 @@ func (t *Task) UnmarshalJSON(data []byte) error {
 }
 
 type Project struct {
-	Slug          string    `json:"slug"` // e.g. "my-project"
-	Name          string    `json:"name"`
-	Description   string    `json:"description"`
-	Specification string    `json:"specification,omitempty"` // Composite project definition & tickets reference
-	Tasks         []Task    `json:"tasks"`
-	InsertedAt    time.Time `json:"inserted_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	Slug        string        `json:"slug"` // e.g. "my-project"
+	Name        string        `json:"name"`
+	Description string        `json:"description"`
+	Spec        []SpecSection `json:"spec,omitempty"` // Composite project definition & tickets reference, in sections
+	Tasks       []Task        `json:"tasks"`
+	InsertedAt  time.Time     `json:"inserted_at"`
+	UpdatedAt   time.Time     `json:"updated_at"`
 }
 
 func (p *Project) UnmarshalJSON(data []byte) error {
 	type Alias Project
 	aux := &struct {
 		*Alias
-		LegacyCreatedAt *time.Time `json:"created_at"`
+		LegacyCreatedAt     *time.Time `json:"created_at"`
+		LegacySpecification string     `json:"specification"`
 	}{
 		Alias: (*Alias)(p),
 	}
@@ -173,6 +174,9 @@ func (p *Project) UnmarshalJSON(data []byte) error {
 	}
 	if p.InsertedAt.IsZero() && aux.LegacyCreatedAt != nil {
 		p.InsertedAt = *aux.LegacyCreatedAt
+	}
+	if len(p.Spec) == 0 && strings.TrimSpace(aux.LegacySpecification) != "" {
+		p.Spec = SplitSpec(aux.LegacySpecification, p.UpdatedAt)
 	}
 	return nil
 }

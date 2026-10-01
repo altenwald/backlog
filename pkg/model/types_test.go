@@ -142,20 +142,24 @@ func TestTaskDeprecatedAndSpecification(t *testing.T) {
 		t.Fatalf("expected Deprecated and Done to be true, got deprecated=%v done=%v", unmarshaledTask.Deprecated, unmarshaledTask.Done)
 	}
 
-	proj := model.Project{
-		Slug:          "spec-proj",
-		Name:          "Spec Project",
-		Specification: "Composite project definition referencing #10",
+	// Legacy single-text specifications are migrated into sections on load.
+	legacy := []byte(`{"slug":"spec-proj","name":"Spec Project","specification":"Composite project definition referencing #10\n\n## Scope\n\nTicket #10"}`)
+	var unmarshaledProj model.Project
+	if err := json.Unmarshal(legacy, &unmarshaledProj); err != nil {
+		t.Fatalf("Unmarshal proj failed: %v", err)
 	}
-	projData, err := json.Marshal(proj)
+	if len(unmarshaledProj.Spec) != 2 || unmarshaledProj.Spec[0].ID != "overview" || unmarshaledProj.Spec[1].ID != "scope" {
+		t.Fatalf("expected overview and scope sections, got %+v", unmarshaledProj.Spec)
+	}
+	projData, err := json.Marshal(unmarshaledProj)
 	if err != nil {
 		t.Fatalf("Marshal proj failed: %v", err)
 	}
-	var unmarshaledProj model.Project
-	if err := json.Unmarshal(projData, &unmarshaledProj); err != nil {
+	var roundTrip model.Project
+	if err := json.Unmarshal(projData, &roundTrip); err != nil {
 		t.Fatalf("Unmarshal proj failed: %v", err)
 	}
-	if unmarshaledProj.Specification != proj.Specification {
-		t.Fatalf("expected Specification %q, got %q", proj.Specification, unmarshaledProj.Specification)
+	if got := model.JoinSpec(roundTrip.Spec); got != "Composite project definition referencing #10\n\n## Scope\n\nTicket #10" {
+		t.Fatalf("unexpected joined spec %q", got)
 	}
 }

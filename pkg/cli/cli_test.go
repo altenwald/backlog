@@ -346,8 +346,8 @@ func TestCLISpecCommand(t *testing.T) {
 
 	stReloaded, _ := store.NewStore(tmpDir)
 	p, _ := stReloaded.GetProject("spec-cli-proj")
-	if p.Specification != testSpec {
-		t.Fatalf("expected spec %q, got %q", testSpec, p.Specification)
+	if specOf(t, p) != testSpec {
+		t.Fatalf("expected spec %q, got %q", testSpec, specOf(t, p))
 	}
 
 	// 5. Set spec via file flag
@@ -363,8 +363,8 @@ func TestCLISpecCommand(t *testing.T) {
 
 	stReloaded, _ = store.NewStore(tmpDir)
 	p, _ = stReloaded.GetProject("spec-cli-proj")
-	if p.Specification != fileContent {
-		t.Fatalf("expected spec from file %q, got %q", fileContent, p.Specification)
+	if specOf(t, p) != fileContent {
+		t.Fatalf("expected spec from file %q, got %q", fileContent, specOf(t, p))
 	}
 
 	// 6. Set spec via file as argument
@@ -374,8 +374,8 @@ func TestCLISpecCommand(t *testing.T) {
 	}
 	stReloaded, _ = store.NewStore(tmpDir)
 	p, _ = stReloaded.GetProject("spec-cli-proj")
-	if p.Specification != "# Spec via file arg" {
-		t.Fatalf("expected spec %q, got %q", "# Spec via file arg", p.Specification)
+	if specOf(t, p) != "# Spec via file arg" {
+		t.Fatalf("expected spec %q, got %q", "# Spec via file arg", specOf(t, p))
 	}
 
 	// 7. Set spec via stdin
@@ -393,8 +393,8 @@ func TestCLISpecCommand(t *testing.T) {
 		}
 		stReloaded, _ = store.NewStore(tmpDir)
 		p, _ = stReloaded.GetProject("spec-cli-proj")
-		if p.Specification != "# Spec via Stdin" {
-			t.Fatalf("expected spec from stdin %q, got %q", "# Spec via Stdin", p.Specification)
+		if specOf(t, p) != "# Spec via Stdin" {
+			t.Fatalf("expected spec from stdin %q, got %q", "# Spec via Stdin", specOf(t, p))
 		}
 	}
 
@@ -418,8 +418,16 @@ func TestCLISpecCommand(t *testing.T) {
 		t.Fatalf("specGetCmd via daemon failed: %v", err)
 	}
 	p, _ = st.GetProject("spec-cli-proj")
-	if p.Specification != "# Daemon Spec" {
-		t.Fatalf("expected daemon spec %q, got %q", "# Daemon Spec", p.Specification)
+	if specOf(t, p) != "# Daemon Spec" {
+		t.Fatalf("expected daemon spec %q, got %q", "# Daemon Spec", specOf(t, p))
 	}
 }
 
+
+func specOf(t *testing.T, p *model.Project) string {
+	t.Helper()
+	if p == nil {
+		t.Fatal("project not found")
+	}
+	return model.JoinSpec(p.Spec)
+}

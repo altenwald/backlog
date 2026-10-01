@@ -9,6 +9,7 @@ require (
 	github.com/go-chi/cors v1.2.1
 	github.com/mark3labs/mcp-go v0.58.0
 	github.com/spf13/cobra v1.9.1
+	golang.org/x/text v0.22.0
 )
 
 require (
@@ -50,6 +51,5 @@ require (
 	golang.org/x/image v0.24.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

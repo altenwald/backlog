@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -413,12 +414,38 @@ func TestMCPDeprecateAndSpecTools(t *testing.T) {
 		t.Fatalf("expected spec updated, got %s", string(updateSpecRespBytes))
 	}
 
-	// 3. get_project_spec tool
-	getSpecMsg := []byte(`{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"get_project_spec","arguments":{"project":"specproj"}}}`)
-	getSpecResp := srv.HandleMessage(context.Background(), getSpecMsg)
-	getSpecRespBytes, _ := json.Marshal(getSpecResp)
-	if !strings.Contains(string(getSpecRespBytes), "Composite Spec") {
-		t.Fatalf("expected get_project_spec to contain Composite Spec, got %s", string(getSpecRespBytes))
+	call := func(id int, name, args string) string {
+		msg := []byte(fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":%q,"arguments":%s}}`, id, name, args))
+		out, _ := json.Marshal(srv.HandleMessage(context.Background(), msg))
+		return string(out)
+	}
+
+	// 3. get_project_spec without sections returns only the index
+	if out := call(12, "get_project_spec", `{"project":"specproj"}`); !strings.Contains(out, `\"index\"`) || strings.Contains(out, "Composite Spec") {
+		t.Fatalf("expected only the section index, got %s", out)
+	}
+	if out := call(13, "get_project_spec", `{"project":"specproj","full":true}`); !strings.Contains(out, "Composite Spec") {
+		t.Fatalf("expected full spec, got %s", out)
+	}
+
+	// 4. per-section tools
+	if out := call(14, "add_spec_section", `{"project":"specproj","title":"Scope","body":"Only #1"}`); !strings.Contains(out, "'scope' added") {
+		t.Fatalf("expected section added, got %s", out)
+	}
+	if out := call(15, "update_spec_section", `{"project":"specproj","section":"scope","body":"Only #1 and #2"}`); !strings.Contains(out, "updated") {
+		t.Fatalf("expected section updated, got %s", out)
+	}
+	if out := call(16, "move_spec_section", `{"project":"specproj","section":"scope","position":0}`); !strings.Contains(out, "moved") {
+		t.Fatalf("expected section moved, got %s", out)
+	}
+	if out := call(17, "get_project_spec", `{"project":"specproj","sections":["scope"]}`); !strings.Contains(out, "Only #1 and #2") || strings.Contains(out, "Composite Spec") {
+		t.Fatalf("expected only the scope section, got %s", out)
+	}
+	if out := call(18, "delete_spec_section", `{"project":"specproj","section":"scope"}`); !strings.Contains(out, "deleted") {
+		t.Fatalf("expected section deleted, got %s", out)
+	}
+	if out := call(19, "update_spec_section", `{"project":"specproj","section":"scope","body":"x"}`); !strings.Contains(out, "not found") {
+		t.Fatalf("expected not found error, got %s", out)
 	}
 }
 

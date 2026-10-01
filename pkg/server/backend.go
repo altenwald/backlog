@@ -29,6 +29,12 @@ type Backend interface {
 	DeprecateTask(slug string, taskID string, deprecated bool) (*model.Task, error)
 	GetProjectSpecification(slug string) (string, error)
 	UpdateProjectSpecification(slug string, spec string) error
+	ListSpecSections(slug string) ([]model.SpecSectionInfo, error)
+	GetSpecSections(slug string, ids []string) ([]model.SpecSection, error)
+	AddSpecSection(slug, title, body string, position int) (*model.SpecSection, error)
+	UpdateSpecSection(slug, id string, title, body *string) (*model.SpecSection, error)
+	DeleteSpecSection(slug, id string) error
+	MoveSpecSection(slug, id string, position int) error
 	GetSettings() (string, error)
 	UpdateSettings(mcpUserInstructions string) error
 }
@@ -111,15 +117,35 @@ func (b *storeBackend) DeprecateTask(slug string, taskID string, deprecated bool
 }
 
 func (b *storeBackend) GetProjectSpecification(slug string) (string, error) {
-	p, err := b.st.GetProject(slug)
-	if err != nil {
-		return "", err
-	}
-	return p.Specification, nil
+	return b.st.GetProjectSpecification(slug)
 }
 
 func (b *storeBackend) UpdateProjectSpecification(slug string, spec string) error {
 	return b.st.UpdateProjectSpecification(slug, spec)
+}
+
+func (b *storeBackend) ListSpecSections(slug string) ([]model.SpecSectionInfo, error) {
+	return b.st.ListSpecSections(slug)
+}
+
+func (b *storeBackend) GetSpecSections(slug string, ids []string) ([]model.SpecSection, error) {
+	return b.st.GetSpecSections(slug, ids)
+}
+
+func (b *storeBackend) AddSpecSection(slug, title, body string, position int) (*model.SpecSection, error) {
+	return b.st.AddSpecSection(slug, title, body, position)
+}
+
+func (b *storeBackend) UpdateSpecSection(slug, id string, title, body *string) (*model.SpecSection, error) {
+	return b.st.UpdateSpecSection(slug, id, title, body)
+}
+
+func (b *storeBackend) DeleteSpecSection(slug, id string) error {
+	return b.st.DeleteSpecSection(slug, id)
+}
+
+func (b *storeBackend) MoveSpecSection(slug, id string, position int) error {
+	return b.st.MoveSpecSection(slug, id, position)
 }
 
 func (b *storeBackend) GetSettings() (string, error) {
@@ -215,6 +241,30 @@ func (b *clientBackend) GetProjectSpecification(slug string) (string, error) {
 
 func (b *clientBackend) UpdateProjectSpecification(slug string, spec string) error {
 	return b.c.UpdateProjectSpecification(slug, spec)
+}
+
+func (b *clientBackend) ListSpecSections(slug string) ([]model.SpecSectionInfo, error) {
+	return b.c.ListSpecSections(slug)
+}
+
+func (b *clientBackend) GetSpecSections(slug string, ids []string) ([]model.SpecSection, error) {
+	return b.c.GetSpecSections(slug, ids)
+}
+
+func (b *clientBackend) AddSpecSection(slug, title, body string, position int) (*model.SpecSection, error) {
+	return b.c.AddSpecSection(slug, title, body, position)
+}
+
+func (b *clientBackend) UpdateSpecSection(slug, id string, title, body *string) (*model.SpecSection, error) {
+	return b.c.UpdateSpecSection(slug, id, title, body)
+}
+
+func (b *clientBackend) DeleteSpecSection(slug, id string) error {
+	return b.c.DeleteSpecSection(slug, id)
+}
+
+func (b *clientBackend) MoveSpecSection(slug, id string, position int) error {
+	return b.c.MoveSpecSection(slug, id, position)
 }
 
 func (b *clientBackend) GetSettings() (string, error) {

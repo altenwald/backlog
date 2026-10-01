@@ -45,8 +45,9 @@ Follow this standard protocol when interacting with Backlog:
 
 4. COMPOSITE PROJECT SPECIFICATION & DEPRECATION:
    - Holistic Project Definition: Each project maintains a composite specification document describing the complete architecture, goals, and technical scope with explicit references to ticket IDs (e.g. #1, #2).
-   - Inspecting Specification: Call 'get_project_specification(project="<project-slug>")' to understand the overarching system design and determine which tickets are currently in scope.
-   - Updating Specification: As architecture evolves, requirements change, or tickets are created/completed, keep the specification up-to-date using 'update_project_specification(project="<project-slug>", specification="...")'.
+   - Sections: The specification is split into named sections (stable IDs such as 'architecture'). Read only what you need to save context.
+   - Inspecting Specification: Call 'get_project_spec(project="<project-slug>")' to get the section index (id, title, size), then 'get_project_spec(project="<project-slug>", sections=["<id>", ...])' to read the relevant sections. Pass full=true only when you really need the whole document.
+   - Updating Specification: As architecture evolves, requirements change, or tickets are created/completed, keep the specification up-to-date section by section with 'update_spec_section(project="<project-slug>", section="<id>", body="...")', 'add_spec_section(project="<project-slug>", title="...", body="...")' and 'delete_spec_section(project="<project-slug>", section="<id>")'. 'update_project_spec' replaces the whole document (split at each "## " heading) and should be reserved for full rewrites.
    - Deprecating Obsolete Work: If a pending ticket is no longer mentioned, relevant, or applicable according to the composite specification, do NOT delete or ignore it. Mark it as deprecated using 'deprecate_task(project="<project-slug>", task_id="<ID>", resolution="...")'. This marks the task as completed and flags it as deprecated with an explanatory resolution.
 
 5. ESTIMATION AND PRIORITY TIERS:
@@ -792,55 +793,7 @@ func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPSe
 		},
 	)
 
-	// Tool: get_project_spec
-	s.AddTool(
-		mcp.NewTool(
-			"get_project_spec",
-			mcp.WithDescription("Get the composite project specification / definition document for a project."),
-			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
-		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			project := strings.TrimSpace(req.GetString("project", ""))
-			if project == "" {
-				return mcp.NewToolResultError("parameter 'project' is required"), nil
-			}
-
-			spec, err := be.GetProjectSpecification(project)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			res := map[string]string{
-				"project":       project,
-				"specification": spec,
-			}
-			data, _ := json.MarshalIndent(res, "", "  ")
-			return mcp.NewToolResultText(string(data)), nil
-		},
-	)
-
-	// Tool: update_project_spec
-	s.AddTool(
-		mcp.NewTool(
-			"update_project_spec",
-			mcp.WithDescription("Update the composite project specification / definition document for a project (describing all project scope and referencing ticket IDs)."),
-			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
-			mcp.WithString("specification", mcp.Description("Markdown content of the composite project specification"), mcp.Required()),
-		),
-		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			project := strings.TrimSpace(req.GetString("project", ""))
-			if project == "" {
-				return mcp.NewToolResultError("parameter 'project' is required"), nil
-			}
-
-			spec := req.GetString("specification", "")
-			if err := be.UpdateProjectSpecification(project, spec); err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			return mcp.NewToolResultText(fmt.Sprintf("✔ Project specification for '%s' updated successfully.", project)), nil
-		},
-	)
+	registerSpecTools(s, be)
 
 	return s
 }

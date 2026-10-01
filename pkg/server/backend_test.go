@@ -3,6 +3,7 @@ package server_test
 import (
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/altenwald/backlog/pkg/client"
@@ -265,5 +266,32 @@ func TestClientBackend(t *testing.T) {
 	specC, err := be.GetProjectSpecification("spec-client-proj")
 	if err != nil || specC != "# Client Spec" {
 		t.Fatalf("expected # Client Spec, got %q err=%v", specC, err)
+	}
+
+	// Spec sections over HTTP
+	sec, err := be.AddSpecSection("spec-client-proj", "Scope", "Ticket #1", -1)
+	if err != nil || sec.ID != "scope" {
+		t.Fatalf("AddSpecSection via clientBackend: %+v err=%v", sec, err)
+	}
+	newBody := "Tickets #1 and #2"
+	if _, err := be.UpdateSpecSection("spec-client-proj", "scope", nil, &newBody); err != nil {
+		t.Fatalf("UpdateSpecSection via clientBackend: %v", err)
+	}
+	if err := be.MoveSpecSection("spec-client-proj", "scope", 0); err != nil {
+		t.Fatalf("MoveSpecSection via clientBackend: %v", err)
+	}
+	infos, err := be.ListSpecSections("spec-client-proj")
+	if err != nil || len(infos) != 2 || infos[0].ID != "scope" || infos[0].Size != len(newBody) {
+		t.Fatalf("ListSpecSections via clientBackend: %+v err=%v", infos, err)
+	}
+	secs, err := be.GetSpecSections("spec-client-proj", []string{"scope"})
+	if err != nil || len(secs) != 1 || secs[0].Body != newBody {
+		t.Fatalf("GetSpecSections via clientBackend: %+v err=%v", secs, err)
+	}
+	if err := be.DeleteSpecSection("spec-client-proj", "scope"); err != nil {
+		t.Fatalf("DeleteSpecSection via clientBackend: %v", err)
+	}
+	if _, err := be.GetSpecSections("spec-client-proj", []string{"scope"}); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("expected not found error, got %v", err)
 	}
 }

@@ -7,11 +7,15 @@ import (
 	"strings"
 
 	"github.com/altenwald/backlog/pkg/client"
+	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/store"
 	"github.com/spf13/cobra"
 )
 
-var flagSpecFile string
+var (
+	flagSpecFile     string
+	flagSpecSections []string
+)
 
 var specCmd = &cobra.Command{
 	Use:     "spec",
@@ -35,20 +39,30 @@ var specGetCmd = &cobra.Command{
 		var spec string
 		var err error
 		if c.IsServerRunning() {
-			spec, err = c.GetProjectSpecification(proj)
-			if err != nil {
-				return err
+			if len(flagSpecSections) > 0 {
+				var sections []model.SpecSection
+				if sections, err = c.GetSpecSections(proj, flagSpecSections); err == nil {
+					spec = model.JoinSpec(sections)
+				}
+			} else {
+				spec, err = c.GetProjectSpecification(proj)
 			}
 		} else {
-			st, err := store.NewStore(flagDataDir)
-			if err != nil {
+			var st *store.Store
+			if st, err = store.NewStore(flagDataDir); err != nil {
 				return err
 			}
-			p, err := st.GetProject(proj)
-			if err != nil {
-				return err
+			if len(flagSpecSections) > 0 {
+				var sections []model.SpecSection
+				if sections, err = st.GetSpecSections(proj, flagSpecSections); err == nil {
+					spec = model.JoinSpec(sections)
+				}
+			} else {
+				spec, err = st.GetProjectSpecification(proj)
 			}
-			spec = p.Specification
+		}
+		if err != nil {
+			return err
 		}
 
 		if strings.TrimSpace(spec) == "" {
@@ -119,7 +133,46 @@ var specSetCmd = &cobra.Command{
 	},
 }
 
+var specSectionsCmd = &cobra.Command{
+	Use:   "sections",
+	Short: "List the sections of the project specification",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		proj := resolveProject(flagProject)
+		if proj == "" {
+			return fmt.Errorf("must specify a project via --project (-p) or BACKLOG_PROJECT environment variable")
+		}
+
+		var infos []model.SpecSectionInfo
+		c := client.NewClient(flagAPIURL)
+		if c.IsServerRunning() {
+			var err error
+			if infos, err = c.ListSpecSections(proj); err != nil {
+				return err
+			}
+		} else {
+			st, err := store.NewStore(flagDataDir)
+			if err != nil {
+				return err
+			}
+			if infos, err = st.ListSpecSections(proj); err != nil {
+				return err
+			}
+		}
+
+		if len(infos) == 0 {
+			fmt.Printf("ℹ Project '%s' has no specification defined yet.\n", proj)
+			return nil
+		}
+		for _, info := range infos {
+			fmt.Printf("%-32s %7d B  %s\n", info.ID, info.Size, info.Title)
+		}
+		return nil
+	},
+}
+
 func init() {
+	specGetCmd.Flags().StringSliceVarP(&flagSpecSections, "section", "s", nil, "Only show these section IDs (repeatable or comma-separated)")
+	specCmd.AddCommand(specSectionsCmd)
 	specSetCmd.Flags().StringVarP(&flagSpecFile, "file", "f", "", "Read specification from markdown/text file")
 	specCmd.AddCommand(specGetCmd)
 	specCmd.AddCommand(specSetCmd)

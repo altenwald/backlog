@@ -5,11 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
-	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/store"
 )
@@ -209,7 +206,7 @@ func TestOtherDialogs(t *testing.T) {
 	_ = deletedProject
 }
 
-func TestAppSpecRefreshLive(t *testing.T) {
+func TestSpecViewSections(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "backlog-ui-spec-refresh-*")
 	if err != nil {
 		t.Fatal(err)
@@ -220,113 +217,64 @@ func TestAppSpecRefreshLive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	_, err = st.CreateProject("test-proj", "Test Project", "Description")
-	if err != nil {
+	if _, err := st.CreateProject("test-proj", "Test Project", "Description"); err != nil {
 		t.Fatal(err)
 	}
 	_ = st.SetActiveProject("test-proj")
-	_ = st.UpdateProjectSpecification("test-proj", "Initial Spec v1")
+	_ = st.UpdateProjectSpecification("test-proj", "Intro\n\n## Scope\n\nTicket #1")
 
 	a := test.NewApp()
 	w := a.NewWindow("Test")
-	bApp := &BacklogApp{
-		fyneApp: a,
-		window:  w,
-		store:   st,
+	v := NewSpecView(st, w)
+
+	// Initial load selects the first section and only loads its body.
+	v.Refresh()
+	if len(v.index) != 2 || v.selectedID != "overview" || v.bodyEntry.Text != "Intro" {
+		t.Fatalf("unexpected initial state: index=%+v selected=%q body=%q", v.index, v.selectedID, v.bodyEntry.Text)
 	}
 
-	// Initialize specEntry, rich text, buttons, and stack
-	bApp.specRichText = widget.NewRichTextFromMarkdown("")
-	bApp.specRichScroll = container.NewVScroll(container.NewPadded(bApp.specRichText))
-	bApp.specEntry = widget.NewMultiLineEntry()
-	bApp.specEntry.OnChanged = func(s string) {
-		if s != bApp.lastLoadedSpecText {
-			bApp.specModified = true
-			bApp.specStatus.SetText("Unsaved changes")
-		} else {
-			bApp.specModified = false
-			bApp.specStatus.SetText("")
-		}
-	}
-	bApp.specStatus = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
-
-	bApp.specPreviewBtn = widget.NewButtonWithIcon("Preview", theme.InfoIcon(), func() {
-		bApp.setSpecEditMode(false)
-	})
-	bApp.specEditBtn = widget.NewButtonWithIcon("Edit", theme.DocumentCreateIcon(), func() {
-		bApp.setSpecEditMode(true)
-	})
-	bApp.specSaveBtn = widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() {
-		activeSlug := bApp.store.GetActiveProjectSlug()
-		if activeSlug != "" {
-			if err := bApp.store.UpdateProjectSpecification(activeSlug, bApp.specEntry.Text); err == nil {
-				bApp.lastLoadedSpecText = bApp.specEntry.Text
-				bApp.specModified = false
-				bApp.setSpecEditMode(false)
-				bApp.specStatus.SetText("Saved")
-			} else {
-				bApp.specStatus.SetText("⚠️ Error saving")
-			}
-		}
-	})
-	bApp.specContentStack = container.NewStack(bApp.specRichScroll, bApp.specEntry)
-
-	// Initial load
-	bApp.refreshSpec()
-
-	if bApp.specEntry.Text != "Initial Spec v1" {
-		t.Fatalf("expected 'Initial Spec v1', got %q", bApp.specEntry.Text)
+	// Selecting another section loads it.
+	v.sectionList.Select(1)
+	if v.selectedID != "scope" || v.bodyEntry.Text != "Ticket #1" {
+		t.Fatalf("expected scope section, got %q / %q", v.selectedID, v.bodyEntry.Text)
 	}
 
-	// 1. Simulate external update via MCP / CLI / API
-	newExternalSpec := "# Updated Spec by MCP\n- Ticket 1"
-	if err := st.UpdateProjectSpecification("test-proj", newExternalSpec); err != nil {
+	// External update (MCP / CLI / API) of the selected section is reflected.
+	body := "Ticket #1 and #2"
+	if _, err := st.UpdateSpecSection("test-proj", "scope", nil, &body); err != nil {
 		t.Fatal(err)
 	}
-
-	// Trigger refreshSpec as listenEvents does
-	bApp.refreshSpec()
-
-	if bApp.specEntry.Text != newExternalSpec {
-		t.Fatalf("expected specEntry to reflect external update %q, got %q", newExternalSpec, bApp.specEntry.Text)
-	}
-	if bApp.specStatus.Text != "Updated" {
-		t.Fatalf("expected status 'Updated', got %q", bApp.specStatus.Text)
+	v.Refresh()
+	if v.bodyEntry.Text != body || v.status.Text != "Updated" {
+		t.Fatalf("expected external update, got %q (status %q)", v.bodyEntry.Text, v.status.Text)
 	}
 
-	// 2. Simulate user typing in GUI
-	bApp.setSpecEditMode(true)
-	if !bApp.specEditMode {
-		t.Fatal("expected specEditMode to be true")
+	// Local edits are tracked and saved to the section only.
+	v.setEditMode(true)
+	v.bodyEntry.SetText("Draft 🚀 -> done")
+	if !v.modified || v.status.Text != "Unsaved changes" {
+		t.Fatalf("expected unsaved changes, got modified=%v status=%q", v.modified, v.status.Text)
+	}
+	v.saveBtn.OnTapped()
+	if v.modified || v.status.Text != "Saved" || v.editMode {
+		t.Fatalf("expected saved state, got modified=%v status=%q edit=%v", v.modified, v.status.Text, v.editMode)
+	}
+	sections, _ := st.GetSpecSections("test-proj", []string{"scope", "overview"})
+	if sections[0].Body != "Draft 🚀 -> done" || sections[1].Body != "Intro" {
+		t.Fatalf("unexpected stored sections: %+v", sections)
 	}
 
-	bApp.specEntry.SetText("# User Unsaved Draft")
-	if !bApp.specModified {
-		t.Fatal("expected specModified to be true after typing")
-	}
-	if bApp.specStatus.Text != "Unsaved changes" {
-		t.Fatalf("expected status 'Unsaved changes', got %q", bApp.specStatus.Text)
+	// Moving the selected section up reorders the index.
+	v.upBtn.OnTapped()
+	if v.index[0].ID != "scope" {
+		t.Fatalf("expected scope first after move, got %+v", v.index)
 	}
 
-	// 3. Switch to preview to inspect rich text
-	bApp.setSpecEditMode(false)
-	if bApp.specEditMode {
-		t.Fatal("expected specEditMode to be false")
-	}
-
-	// 4. Simulate clicking Save in GUI
-	bApp.specSaveBtn.OnTapped()
-	if bApp.specModified {
-		t.Fatal("expected specModified to be false after Save")
-	}
-	if bApp.specStatus.Text != "Saved" {
-		t.Fatalf("expected status 'Saved', got %q", bApp.specStatus.Text)
-	}
-
-	savedProj, _ := st.GetProject("test-proj")
-	if savedProj.Specification != "# User Unsaved Draft" {
-		t.Fatalf("expected store to have saved draft, got %q", savedProj.Specification)
+	// Deleting the selected section in the store falls back to the first one.
+	_ = st.DeleteSpecSection("test-proj", "scope")
+	v.Refresh()
+	if v.selectedID != "overview" || len(v.index) != 1 {
+		t.Fatalf("expected fallback to overview, got %q / %+v", v.selectedID, v.index)
 	}
 }
 

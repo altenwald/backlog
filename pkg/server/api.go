@@ -44,6 +44,12 @@ func (h *APIHandler) RegisterRoutes(r chi.Router) {
 			r.Delete("/", h.deleteProject)
 			r.Get("/spec", h.getProjectSpec)
 			r.Put("/spec", h.updateProjectSpec)
+			r.Get("/spec/sections", h.listSpecSections)
+			r.Post("/spec/sections", h.addSpecSection)
+			r.Get("/spec/sections/{id}", h.getSpecSection)
+			r.Patch("/spec/sections/{id}", h.updateSpecSection)
+			r.Delete("/spec/sections/{id}", h.deleteSpecSection)
+			r.Post("/spec/sections/{id}/move", h.moveSpecSection)
 		})
 
 		// Settings
@@ -357,12 +363,12 @@ type projectSpecPayload struct {
 
 func (h *APIHandler) getProjectSpec(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
-	p, err := h.store.GetProject(slug)
+	spec, err := h.store.GetProjectSpecification(slug)
 	if err != nil {
 		errorResponse(w, http.StatusNotFound, err.Error())
 		return
 	}
-	jsonResponse(w, http.StatusOK, projectSpecPayload{Specification: p.Specification})
+	jsonResponse(w, http.StatusOK, projectSpecPayload{Specification: spec})
 }
 
 func (h *APIHandler) updateProjectSpec(w http.ResponseWriter, r *http.Request) {

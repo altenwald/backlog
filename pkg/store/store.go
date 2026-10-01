@@ -32,6 +32,7 @@ type Event struct {
 	Type        EventType      `json:"type"`
 	ProjectSlug string         `json:"project_slug"`
 	TaskID      string         `json:"task_id,omitempty"`
+	SectionID   string         `json:"section_id,omitempty"`
 	Summary     *model.Summary `json:"summary,omitempty"`
 }
 
@@ -902,33 +903,4 @@ func (s *Store) DeprecateTask(projectSlug string, taskID string, deprecated bool
 	}
 
 	return nil, fmt.Errorf("task ID '%s' not found in project '%s'", taskID, projectSlug)
-}
-
-// UpdateProjectSpecification updates the composite specification for a project.
-func (s *Store) UpdateProjectSpecification(slug, spec string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if slug == "" {
-		slug = s.config.ActiveProject
-	}
-	slug = strings.ToLower(slug)
-
-	p, ok := s.projects[slug]
-	if !ok {
-		return fmt.Errorf("project '%s' not found", slug)
-	}
-
-	p.Specification = spec
-	p.UpdatedAt = time.Now()
-
-	if err := s.saveProject(p); err != nil {
-		return err
-	}
-
-	go s.notify(Event{
-		Type:        EventProjectUpdated,
-		ProjectSlug: slug,
-	})
-	return nil
 }
