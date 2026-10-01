@@ -20,7 +20,7 @@ STYLES = {
     "BoldItalic": dict(wght=700, slnt=-15),
 }
 FAMILY = "Backlog Recursive Semimono"
-LEADING = 0.25
+LEADING = 5 / 13  # 5 px at the 13 px UI text size; keep in sync with readingLeading in pkg/ui/fonts.go
 
 
 def add_leading(font):

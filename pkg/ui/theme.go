@@ -64,9 +64,9 @@ func (t *BacklogTheme) Size(name fyne.ThemeSizeName) float32 {
 	case theme.SizeNamePadding:
 		return 6
 	case theme.SizeNameInnerPadding:
-		// The reading font carries 1/4 em of extra leading (half above, half
-		// below), so single-line widgets drop that from their padding.
-		return 9 - 13.0/8
+		// The reading font carries extra leading (half above, half below), so
+		// single-line widgets drop that from their padding.
+		return 9 - 13*readingLeading/2
 	case theme.SizeNameInputRadius, theme.SizeNameSelectionRadius:
 		return 6
 	case theme.SizeNameHeadingText:

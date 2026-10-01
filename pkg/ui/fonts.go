@@ -10,6 +10,10 @@ import (
 // (SIL OFL 1.1, see assets/fonts/OFL.txt): MONO=0.5, CASL=0, with its code
 // ligatures moved from 'dlig' to 'liga' so Fyne's shaper applies them.
 // tools/fonts/build_spec_font.py regenerates the files.
+// readingLeading is the extra line height (in em) built into the font's
+// vertical metrics: 5 px at the 13 px UI text size.
+const readingLeading = 5.0 / 13
+
 var (
 	//go:embed assets/fonts/RecursiveSemimono-Regular.ttf
 	specFontRegular []byte
