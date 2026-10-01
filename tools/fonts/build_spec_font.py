@@ -3,6 +3,10 @@
 Instance: MONO=0.5 (semi-mono), CASL=0 (linear), CRSV=0.5 (cursive only when
 slanted). Recursive's code ligatures live in 'dlig', which Fyne cannot enable,
 so their lookups are merged into 'liga' (on by default in HarfBuzz).
+
+Fyne only adds line spacing between paragraphs, so the extra leading inside
+wrapped text (LEADING, in em) is built into the vertical metrics, split evenly
+above and below the glyphs to keep text vertically centred.
 """
 import sys
 from fontTools.ttLib import TTFont
@@ -16,6 +20,18 @@ STYLES = {
     "BoldItalic": dict(wght=700, slnt=-15),
 }
 FAMILY = "Backlog Recursive Semimono"
+LEADING = 0.25
+
+
+def add_leading(font):
+    extra = round(font["head"].unitsPerEm * LEADING / 2)
+    hhea, os2 = font["hhea"], font["OS/2"]
+    hhea.ascent += extra
+    hhea.descent -= extra
+    os2.sTypoAscender += extra
+    os2.sTypoDescender -= extra
+    os2.usWinAscent = max(os2.usWinAscent, hhea.ascent)
+    os2.usWinDescent = max(os2.usWinDescent, -hhea.descent)
 
 
 def freeze_dlig(font):
@@ -59,6 +75,7 @@ for style, loc in STYLES.items():
     f = TTFont(src)
     inst = instancer.instantiateVariableFont(f, dict(MONO=0.5, CASL=0, CRSV=0.5, **loc), updateFontNames=False)
     freeze_dlig(inst)
+    add_leading(inst)
     rename(inst, style)
     for t in ("DSIG",):
         if t in inst:
