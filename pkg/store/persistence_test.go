@@ -46,7 +46,7 @@ func TestCorruptConfigFailsLoudly(t *testing.T) {
 	}
 }
 
-func TestSaveLeavesNoTempFilesAndReloads(t *testing.T) {
+func TestReloadKeepsTasks(t *testing.T) {
 	tmpDir := t.TempDir()
 	st, err := store.NewStore(tmpDir)
 	if err != nil {
@@ -61,17 +61,7 @@ func TestSaveLeavesNoTempFilesAndReloads(t *testing.T) {
 		}
 	}
 
-	entries, err := os.ReadDir(filepath.Join(tmpDir, "projects"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 1 || entries[0].Name() != "persist.json" {
-		var names []string
-		for _, e := range entries {
-			names = append(names, e.Name())
-		}
-		t.Fatalf("expected only persist.json, got %v", names)
-	}
+	_ = st.Close()
 
 	reloaded, err := store.NewStore(tmpDir)
 	if err != nil {

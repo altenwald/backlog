@@ -2,7 +2,6 @@ package store_test
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -142,8 +141,14 @@ func TestTaskHierarchyAndCascadeDelete(t *testing.T) {
 	}
 
 	// Ensure persistence survives reload
-	stReloaded, err := store.NewStore(filepath.Dir(tmpDir))
-	_ = stReloaded
+	stReloaded, err := store.NewStore(tmpDir)
+	if err != nil {
+		t.Fatalf("reload failed: %v", err)
+	}
+	reloadedTasks, err := stReloaded.ListTasks(projSlug, model.TaskFilter{})
+	if err != nil || len(reloadedTasks) != 1 {
+		t.Fatalf("expected 1 task after reload, got %d (err %v)", len(reloadedTasks), err)
+	}
 }
 
 func TestTaskDependenciesAndBlocking(t *testing.T) {

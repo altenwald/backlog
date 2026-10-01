@@ -1,7 +1,7 @@
 package store
 
 import (
-	"encoding/json"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -36,16 +36,19 @@ type Event struct {
 	Summary     *model.Summary `json:"summary,omitempty"`
 }
 
-type Config struct {
-	ActiveProject       string `json:"active_project"`
-	MCPUserInstructions string `json:"mcp_user_instructions,omitempty"`
-}
+const (
+	settingActiveProject       = "active_project"
+	settingMCPUserInstructions = "mcp_user_instructions"
+)
 
+// Store persists projects, tasks and settings in a SQLite database
+// (backlog.db inside the data directory). Writes are serialized by mu so
+// that validation and the write it guards run as one unit; every write is
+// also a single SQLite transaction.
 type Store struct {
 	mu          sync.RWMutex
 	dataDir     string
-	config      Config
-	projects    map[string]*model.Project
+	db          *sql.DB
 	subscribers []chan Event
 }
 
@@ -58,97 +61,35 @@ func NewStore(dataDir string) (*Store, error) {
 		dataDir = filepath.Join(home, ".config", "backlog")
 	}
 
-	projectsDir := filepath.Join(dataDir, "projects")
-	if err := os.MkdirAll(projectsDir, 0755); err != nil {
-		return nil, fmt.Errorf("cannot create projects dir: %w", err)
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return nil, fmt.Errorf("cannot create data dir: %w", err)
 	}
 
-	s := &Store{
-		dataDir:  dataDir,
-		projects: make(map[string]*model.Project),
+	dbPath := filepath.Join(dataDir, dbFileName)
+	if _, err := os.Stat(dbPath); errors.Is(err, os.ErrNotExist) && hasLegacyData(dataDir) {
+		if err := importLegacy(dataDir); err != nil {
+			return nil, fmt.Errorf("cannot import JSON data into %s: %w (JSON files were left untouched)", dbPath, err)
+		}
 	}
 
-	if err := s.loadAll(); err != nil {
+	db, err := openDB(dbPath)
+	if err != nil {
 		return nil, err
 	}
 
-	return s, nil
+	return &Store{
+		dataDir: dataDir,
+		db:      db,
+	}, nil
+}
+
+// Close releases the database handle.
+func (s *Store) Close() error {
+	return s.db.Close()
 }
 
 func (s *Store) GetDataDir() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return s.dataDir
-}
-
-func (s *Store) loadAll() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Load config
-	configPath := filepath.Join(s.dataDir, "config.json")
-	if data, err := os.ReadFile(configPath); err == nil {
-		if err := json.Unmarshal(data, &s.config); err != nil {
-			return fmt.Errorf("cannot parse %s: %w (fix or move the file away; it was left untouched)", configPath, err)
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("cannot read %s: %w", configPath, err)
-	}
-
-	// Load projects
-	projectsDir := filepath.Join(s.dataDir, "projects")
-	entries, err := os.ReadDir(projectsDir)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
-			filePath := filepath.Join(projectsDir, entry.Name())
-			data, err := os.ReadFile(filePath)
-			if err != nil {
-				return fmt.Errorf("cannot read %s: %w", filePath, err)
-			}
-			// Refuse to start rather than silently hiding a project: a later
-			// CreateProject with the same slug would overwrite the file.
-			var p model.Project
-			if err := json.Unmarshal(data, &p); err != nil {
-				return fmt.Errorf("cannot parse %s: %w (fix or move the file away; it was left untouched)", filePath, err)
-			}
-			if p.Slug == "" {
-				return fmt.Errorf("cannot load %s: missing project slug", filePath)
-			}
-			s.projects[p.Slug] = &p
-		}
-	}
-
-	if s.config.ActiveProject == "" && len(s.projects) > 0 {
-		for slug := range s.projects {
-			s.config.ActiveProject = slug
-			break
-		}
-	}
-
-	return nil
-}
-
-func (s *Store) saveConfig() error {
-	configPath := filepath.Join(s.dataDir, "config.json")
-	data, err := json.MarshalIndent(s.config, "", "  ")
-	if err != nil {
-		return err
-	}
-	return writeFileAtomic(configPath, data, 0644)
-}
-
-func (s *Store) saveProject(p *model.Project) error {
-	projectsDir := filepath.Join(s.dataDir, "projects")
-	filePath := filepath.Join(projectsDir, p.Slug+".json")
-	data, err := json.MarshalIndent(p, "", "  ")
-	if err != nil {
-		return err
-	}
-	return writeFileAtomic(filePath, data, 0644)
 }
 
 func (s *Store) Subscribe() <-chan Event {
@@ -160,7 +101,10 @@ func (s *Store) Subscribe() <-chan Event {
 }
 
 func (s *Store) notify(ev Event) {
-	for _, ch := range s.subscribers {
+	s.mu.RLock()
+	subs := append([]chan Event(nil), s.subscribers...)
+	s.mu.RUnlock()
+	for _, ch := range subs {
 		select {
 		case ch <- ev:
 		default:
@@ -168,27 +112,95 @@ func (s *Store) notify(ev Event) {
 	}
 }
 
+type querier interface {
+	QueryRow(query string, args ...any) *sql.Row
+	Query(query string, args ...any) (*sql.Rows, error)
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func getSetting(q querier, key string) (string, error) {
+	var v string
+	err := q.QueryRow(`SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return v, err
+}
+
+func setSetting(q querier, key, value string) error {
+	_, err := q.Exec(`INSERT INTO settings(key, value) VALUES(?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
+}
+
+// activeProject returns the configured active project, falling back to the
+// first project by slug when none is set or the configured one is gone.
+func activeProject(q querier) string {
+	slug, _ := getSetting(q, settingActiveProject)
+	if slug != "" {
+		var exists int
+		if q.QueryRow(`SELECT 1 FROM projects WHERE slug = ?`, slug).Scan(&exists) == nil {
+			return slug
+		}
+	}
+	var first string
+	_ = q.QueryRow(`SELECT slug FROM projects ORDER BY slug LIMIT 1`).Scan(&first)
+	return first
+}
+
+func (s *Store) resolveSlug(q querier, slug string) string {
+	if slug == "" {
+		return activeProject(q)
+	}
+	return strings.ToLower(slug)
+}
+
+func projectExists(q querier, slug string) error {
+	var one int
+	err := q.QueryRow(`SELECT 1 FROM projects WHERE slug = ?`, slug).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("project '%s' not found", slug)
+	}
+	return err
+}
+
+// withTx runs fn inside a write transaction while holding the write lock.
+func (s *Store) withTx(fn func(tx *sql.Tx) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) GetActiveProjectSlug() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.config.ActiveProject
+	return activeProject(s.db)
 }
 
 func (s *Store) SetActiveProject(slug string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	slug = strings.ToLower(slug)
-	if _, ok := s.projects[slug]; !ok {
-		return fmt.Errorf("project '%s' not found", slug)
-	}
-
-	if s.config.ActiveProject == slug {
-		return nil
-	}
-
-	s.config.ActiveProject = slug
-	if err := s.saveConfig(); err != nil {
+	changed := false
+	err := s.withTx(func(tx *sql.Tx) error {
+		if err := projectExists(tx, slug); err != nil {
+			return err
+		}
+		current, err := getSetting(tx, settingActiveProject)
+		if err != nil {
+			return err
+		}
+		if current == slug {
+			return nil
+		}
+		changed = true
+		return setSetting(tx, settingActiveProject, slug)
+	})
+	if err != nil || !changed {
 		return err
 	}
 
@@ -199,48 +211,65 @@ func (s *Store) SetActiveProject(slug string) error {
 	return nil
 }
 
+const projectColumns = `slug, name, description, inserted_at, updated_at`
+
+func scanProject(row interface{ Scan(...any) error }) (*model.Project, error) {
+	var p model.Project
+	var inserted, updated string
+	if err := row.Scan(&p.Slug, &p.Name, &p.Description, &inserted, &updated); err != nil {
+		return nil, err
+	}
+	p.InsertedAt = parseTime(inserted)
+	p.UpdatedAt = parseTime(updated)
+	p.Tasks = []model.Task{}
+	return &p, nil
+}
+
+// ListProjects returns project metadata sorted by name. Tasks and the
+// specification are not loaded; use GetProject for a single full project.
 func (s *Store) ListProjects() []*model.Project {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	rows, err := s.db.Query(`SELECT ` + projectColumns + ` FROM projects ORDER BY name, slug`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
 
 	var result []*model.Project
-	for _, p := range s.projects {
-		copyProj := *p
-		result = append(result, &copyProj)
+	for rows.Next() {
+		p, err := scanProject(rows)
+		if err != nil {
+			return result
+		}
+		result = append(result, p)
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Name < result[j].Name
-	})
 	return result
 }
 
+// GetProject returns a project with all its tasks. The specification is not
+// loaded; read it with GetProjectSpecification or GetSpecSections.
 func (s *Store) GetProject(slug string) (*model.Project, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	slug = s.resolveSlug(s.db, slug)
 
-	if slug == "" {
-		slug = s.config.ActiveProject
-	}
-	slug = strings.ToLower(slug)
-
-	p, ok := s.projects[slug]
-	if !ok {
+	p, err := scanProject(s.db.QueryRow(`SELECT `+projectColumns+` FROM projects WHERE slug = ?`, slug))
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("project '%s' not found", slug)
 	}
-	copyProj := *p
-	return &copyProj, nil
+	if err != nil {
+		return nil, err
+	}
+
+	tasks, err := loadTasks(s.db, slug, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	p.Tasks = tasks
+	return p, nil
 }
 
 func (s *Store) CreateProject(slug, name, description string) (*model.Project, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	slug = strings.ToLower(strings.TrimSpace(slug))
 	if slug == "" {
 		return nil, errors.New("project slug cannot be empty")
-	}
-	if _, exists := s.projects[slug]; exists {
-		return nil, fmt.Errorf("project '%s' already exists", slug)
 	}
 	if name == "" {
 		name = strings.Title(slug)
@@ -255,13 +284,24 @@ func (s *Store) CreateProject(slug, name, description string) (*model.Project, e
 		InsertedAt:  now,
 		UpdatedAt:   now,
 	}
-	s.projects[slug] = p
-	if s.config.ActiveProject == "" {
-		s.config.ActiveProject = slug
-		_ = s.saveConfig()
-	}
 
-	if err := s.saveProject(p); err != nil {
+	err := s.withTx(func(tx *sql.Tx) error {
+		if projectExists(tx, slug) == nil {
+			return fmt.Errorf("project '%s' already exists", slug)
+		}
+		if err := insertProject(tx, p, 1); err != nil {
+			return err
+		}
+		current, err := getSetting(tx, settingActiveProject)
+		if err != nil {
+			return err
+		}
+		if current == "" {
+			return setSetting(tx, settingActiveProject, slug)
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -272,34 +312,40 @@ func (s *Store) CreateProject(slug, name, description string) (*model.Project, e
 	return p, nil
 }
 
-func (s *Store) DeleteProject(slug string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func insertProject(q querier, p *model.Project, nextTaskID int) error {
+	_, err := q.Exec(`INSERT INTO projects(slug, name, description, next_task_id, inserted_at, updated_at)
+		VALUES(?, ?, ?, ?, ?, ?)`,
+		p.Slug, p.Name, p.Description, nextTaskID, formatTime(p.InsertedAt), formatTime(p.UpdatedAt))
+	return err
+}
 
+func (s *Store) DeleteProject(slug string) error {
 	slug = strings.ToLower(strings.TrimSpace(slug))
 	if slug == "" {
 		return errors.New("project slug cannot be empty")
 	}
 
-	if _, exists := s.projects[slug]; !exists {
-		return fmt.Errorf("project '%s' not found", slug)
-	}
-
-	delete(s.projects, slug)
-
-	// Remove JSON file on disk
-	filePath := filepath.Join(s.dataDir, "projects", slug+".json")
-	_ = os.Remove(filePath)
-
-	// If the deleted project was active, pick another project or clear
-	if s.config.ActiveProject == slug {
-		newActive := ""
-		for otherSlug := range s.projects {
-			newActive = otherSlug
-			break
+	err := s.withTx(func(tx *sql.Tx) error {
+		if err := projectExists(tx, slug); err != nil {
+			return err
 		}
-		s.config.ActiveProject = newActive
-		_ = s.saveConfig()
+		// Children are deleted by cascade.
+		if _, err := tx.Exec(`DELETE FROM projects WHERE slug = ?`, slug); err != nil {
+			return err
+		}
+		current, err := getSetting(tx, settingActiveProject)
+		if err != nil {
+			return err
+		}
+		if current == slug {
+			var next string
+			_ = tx.QueryRow(`SELECT slug FROM projects ORDER BY slug LIMIT 1`).Scan(&next)
+			return setSetting(tx, settingActiveProject, next)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	go s.notify(Event{
@@ -309,63 +355,219 @@ func (s *Store) DeleteProject(slug string) error {
 	return nil
 }
 
+const taskColumns = `id, parent_id, title, description, size, tier, done, deprecated,
+	assignee, resolution, inserted_at, updated_at, terminated_at`
+
+func scanTask(row interface{ Scan(...any) error }) (model.Task, error) {
+	var t model.Task
+	var parent, terminated sql.NullString
+	var inserted, updated, size string
+	var tier int
+	var done, deprecated int
+	if err := row.Scan(&t.ID, &parent, &t.Title, &t.Description, &size, &tier, &done, &deprecated,
+		&t.Assignee, &t.Resolution, &inserted, &updated, &terminated); err != nil {
+		return t, err
+	}
+	t.ParentID = parent.String
+	t.Size = model.Size(size)
+	t.Tier = model.Tier(tier)
+	t.Done = done != 0
+	t.Deprecated = deprecated != 0
+	t.InsertedAt = parseTime(inserted)
+	t.UpdatedAt = parseTime(updated)
+	if terminated.Valid {
+		ts := parseTime(terminated.String)
+		t.TerminatedAt = &ts
+	}
+	return t, nil
+}
+
+// loadTasks returns the project's tasks in insertion order, optionally
+// narrowed by an extra SQL condition on the tasks table (aliased t).
+func loadTasks(q querier, slug, where string, args []any) ([]model.Task, error) {
+	query := `SELECT ` + taskColumns + ` FROM tasks t WHERE t.project_slug = ?`
+	if where != "" {
+		query += ` AND ` + where
+	}
+	query += ` ORDER BY t.rowid`
+
+	rows, err := q.Query(query, append([]any{slug}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	var tasks []model.Task
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		tasks = append(tasks, t)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	deps, err := loadDeps(q, slug)
+	if err != nil {
+		return nil, err
+	}
+	for i := range tasks {
+		tasks[i].DependsOn = deps[tasks[i].ID]
+	}
+	return tasks, nil
+}
+
+func loadDeps(q querier, slug string) (map[string][]string, error) {
+	rows, err := q.Query(`SELECT task_id, depends_on FROM task_deps WHERE project_slug = ? ORDER BY rowid`, slug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	deps := make(map[string][]string)
+	for rows.Next() {
+		var id, dep string
+		if err := rows.Scan(&id, &dep); err != nil {
+			return nil, err
+		}
+		deps[id] = append(deps[id], dep)
+	}
+	return deps, rows.Err()
+}
+
+func getTask(q querier, slug, id string) (model.Task, error) {
+	t, err := scanTask(q.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE project_slug = ? AND id = ?`, slug, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return t, fmt.Errorf("task ID '%s' not found in project '%s'", id, slug)
+	}
+	if err != nil {
+		return t, err
+	}
+	rows, err := q.Query(`SELECT depends_on FROM task_deps WHERE project_slug = ? AND task_id = ? ORDER BY rowid`, slug, id)
+	if err != nil {
+		return t, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var dep string
+		if err := rows.Scan(&dep); err != nil {
+			return t, err
+		}
+		t.DependsOn = append(t.DependsOn, dep)
+	}
+	return t, rows.Err()
+}
+
+func taskExists(q querier, slug, id string) bool {
+	var one int
+	return q.QueryRow(`SELECT 1 FROM tasks WHERE project_slug = ? AND id = ?`, slug, id).Scan(&one) == nil
+}
+
+func insertTask(q querier, slug string, t model.Task) error {
+	var terminated any
+	if t.TerminatedAt != nil {
+		terminated = formatTime(*t.TerminatedAt)
+	}
+	_, err := q.Exec(`INSERT INTO tasks(project_slug, id, parent_id, title, description, size, tier, done,
+		deprecated, assignee, resolution, inserted_at, updated_at, terminated_at)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		slug, t.ID, nullString(t.ParentID), t.Title, t.Description, string(t.Size), int(t.Tier),
+		boolInt(t.Done), boolInt(t.Deprecated), t.Assignee, t.Resolution,
+		formatTime(t.InsertedAt), formatTime(t.UpdatedAt), terminated)
+	if err != nil {
+		return err
+	}
+	return replaceDeps(q, slug, t.ID, t.DependsOn)
+}
+
+func updateTaskRow(q querier, slug string, t model.Task) error {
+	var terminated any
+	if t.TerminatedAt != nil {
+		terminated = formatTime(*t.TerminatedAt)
+	}
+	_, err := q.Exec(`UPDATE tasks SET parent_id = ?, title = ?, description = ?, size = ?, tier = ?,
+		done = ?, deprecated = ?, assignee = ?, resolution = ?, updated_at = ?, terminated_at = ?
+		WHERE project_slug = ? AND id = ?`,
+		nullString(t.ParentID), t.Title, t.Description, string(t.Size), int(t.Tier),
+		boolInt(t.Done), boolInt(t.Deprecated), t.Assignee, t.Resolution,
+		formatTime(t.UpdatedAt), terminated, slug, t.ID)
+	return err
+}
+
+func replaceDeps(q querier, slug, id string, deps []string) error {
+	if _, err := q.Exec(`DELETE FROM task_deps WHERE project_slug = ? AND task_id = ?`, slug, id); err != nil {
+		return err
+	}
+	for _, d := range deps {
+		if _, err := q.Exec(`INSERT INTO task_deps(project_slug, task_id, depends_on) VALUES(?, ?, ?)`, slug, id, d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func touchProject(q querier, slug string, now time.Time) error {
+	_, err := q.Exec(`UPDATE projects SET updated_at = ? WHERE slug = ?`, formatTime(now), slug)
+	return err
+}
+
 func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.Task, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if projectSlug == "" {
-		projectSlug = s.config.ActiveProject
-	}
-	projectSlug = strings.ToLower(projectSlug)
-
-	p, ok := s.projects[projectSlug]
-	if !ok {
-		return nil, fmt.Errorf("project '%s' not found", projectSlug)
+	projectSlug = s.resolveSlug(s.db, projectSlug)
+	if err := projectExists(s.db, projectSlug); err != nil {
+		return nil, err
 	}
 
-	var results []model.Task
+	var conds []string
+	var args []any
+	if filter.Tier != nil {
+		conds = append(conds, `t.tier = ?`)
+		args = append(args, int(*filter.Tier))
+	}
+	if filter.ParentID != nil {
+		conds = append(conds, `COALESCE(t.parent_id, '') = ?`)
+		args = append(args, *filter.ParentID)
+	}
+	if filter.DependsOn != nil && *filter.DependsOn != "" {
+		conds = append(conds, `EXISTS (SELECT 1 FROM task_deps d
+			WHERE d.project_slug = t.project_slug AND d.task_id = t.id AND d.depends_on = ?)`)
+		args = append(args, *filter.DependsOn)
+	}
+	if filter.Blocked != nil {
+		conds = append(conds, `EXISTS (SELECT 1 FROM task_deps d
+			JOIN tasks x ON x.project_slug = d.project_slug AND x.id = d.depends_on
+			WHERE d.project_slug = t.project_slug AND d.task_id = t.id AND x.done = 0) = ?`)
+		args = append(args, boolInt(*filter.Blocked))
+	}
+	if filter.Size != nil {
+		conds = append(conds, `t.size = ?`)
+		args = append(args, string(*filter.Size))
+	}
+	if filter.Done != nil {
+		conds = append(conds, `t.done = ?`)
+		args = append(args, boolInt(*filter.Done))
+	}
+	if filter.Deprecated != nil {
+		conds = append(conds, `t.deprecated = ?`)
+		args = append(args, boolInt(*filter.Deprecated))
+	}
+
+	tasks, err := loadTasks(s.db, projectSlug, strings.Join(conds, ` AND `), args)
+	if err != nil {
+		return nil, err
+	}
+
+	// Assignee and free-text matching stay in Go: SQLite's lower() and LIKE
+	// only fold ASCII, and descriptions are often written in Spanish.
+	var reqAssignee string
+	if filter.Assignee != nil {
+		reqAssignee = strings.ToLower(strings.TrimPrefix(*filter.Assignee, "@"))
+	}
 	searchLower := strings.ToLower(strings.TrimSpace(filter.Search))
 
-	taskMap := make(map[string]model.Task, len(p.Tasks))
-	for _, t := range p.Tasks {
-		taskMap[t.ID] = t
-	}
-
-	for _, task := range p.Tasks {
-		if filter.Tier != nil && task.Tier != *filter.Tier {
-			continue
-		}
-		if filter.ParentID != nil && task.ParentID != *filter.ParentID {
-			continue
-		}
-		if filter.DependsOn != nil && *filter.DependsOn != "" {
-			hasDep := false
-			for _, d := range task.DependsOn {
-				if d == *filter.DependsOn {
-					hasDep = true
-					break
-				}
-			}
-			if !hasDep {
-				continue
-			}
-		}
-		if filter.Blocked != nil {
-			if task.IsBlocked(taskMap) != *filter.Blocked {
-				continue
-			}
-		}
-		if filter.Size != nil && task.Size != *filter.Size {
-			continue
-		}
-		if filter.Done != nil && task.Done != *filter.Done {
-			continue
-		}
-		if filter.Deprecated != nil && task.Deprecated != *filter.Deprecated {
-			continue
-		}
-		if filter.Assignee != nil && *filter.Assignee != "" {
-			reqAssignee := strings.ToLower(strings.TrimPrefix(*filter.Assignee, "@"))
+	var results []model.Task
+	for _, task := range tasks {
+		if reqAssignee != "" {
 			taskAssignee := strings.ToLower(strings.TrimPrefix(task.Assignee, "@"))
 			if reqAssignee == "unassigned" {
 				if task.Assignee != "" {
@@ -406,7 +608,7 @@ func (s *Store) GetTopPriorities(projectSlug string, limit int) ([]model.Task, e
 	}
 
 	// Sort by: 1) Unblocked first (actionable), 2) Tier (ascending: T1 first), 3) Size weight (descending)
-	sort.Slice(tasks, func(i, j int) bool {
+	sort.SliceStable(tasks, func(i, j int) bool {
 		blockedI := tasks[i].IsBlocked(taskMap)
 		blockedJ := tasks[j].IsBlocked(taskMap)
 		if blockedI != blockedJ {
@@ -425,59 +627,74 @@ func (s *Store) GetTopPriorities(projectSlug string, limit int) ([]model.Task, e
 }
 
 func (s *Store) GetSummary(projectSlug string) (*model.Summary, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	projectSlug = s.resolveSlug(s.db, projectSlug)
 
-	if projectSlug == "" {
-		projectSlug = s.config.ActiveProject
-	}
-	projectSlug = strings.ToLower(projectSlug)
-
-	p, ok := s.projects[projectSlug]
-	if !ok {
+	var name string
+	err := s.db.QueryRow(`SELECT name FROM projects WHERE slug = ?`, projectSlug).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("project '%s' not found", projectSlug)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	summary := &model.Summary{
-		ProjectSlug:     p.Slug,
-		ProjectName:     p.Name,
+		ProjectSlug:     projectSlug,
+		ProjectName:     name,
 		SizeCounts:      make(map[model.Size]int),
 		OpenSizeCounts:  make(map[model.Size]int),
 		TierCounts:      make(map[model.Tier]int),
 		TotalTierCounts: make(map[model.Tier]int),
 	}
 
-	for _, t := range p.Tasks {
-		summary.TotalTasks++
-		summary.SizeCounts[t.Size]++
-		summary.TotalTierCounts[t.Tier]++
-
-		if t.Done {
-			summary.CompletedTasks++
+	rows, err := s.db.Query(`SELECT size, tier, done, COUNT(*) FROM tasks
+		WHERE project_slug = ? GROUP BY size, tier, done`, projectSlug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var size string
+		var tier, done, n int
+		if err := rows.Scan(&size, &tier, &done, &n); err != nil {
+			return nil, err
+		}
+		sz, tr := model.Size(size), model.Tier(tier)
+		summary.TotalTasks += n
+		summary.SizeCounts[sz] += n
+		summary.TotalTierCounts[tr] += n
+		if done != 0 {
+			summary.CompletedTasks += n
 		} else {
-			summary.OpenTasks++
-			summary.OpenSizeCounts[t.Size]++
-			summary.TierCounts[t.Tier]++
+			summary.OpenTasks += n
+			summary.OpenSizeCounts[sz] += n
+			summary.TierCounts[tr] += n
 		}
 	}
+	return summary, rows.Err()
+}
 
-	return summary, nil
+func cleanDependsOn(q querier, slug, selfID string, deps []string) ([]string, error) {
+	var clean []string
+	seen := make(map[string]bool)
+	for _, depID := range deps {
+		depID = strings.TrimSpace(depID)
+		if depID == "" || seen[depID] {
+			continue
+		}
+		if selfID != "" && depID == selfID {
+			return nil, errors.New("a task cannot depend on itself")
+		}
+		seen[depID] = true
+		if !taskExists(q, slug, depID) {
+			return nil, fmt.Errorf("dependency task #%s not found in project '%s'", depID, slug)
+		}
+		clean = append(clean, depID)
+	}
+	return clean, nil
 }
 
 func (s *Store) AddTask(projectSlug string, task model.Task) (*model.Task, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if projectSlug == "" {
-		projectSlug = s.config.ActiveProject
-	}
-	projectSlug = strings.ToLower(projectSlug)
-
-	p, ok := s.projects[projectSlug]
-	if !ok {
-		return nil, fmt.Errorf("project '%s' not found", projectSlug)
-	}
-
 	if task.Title == "" {
 		return nil, errors.New("task title is required")
 	}
@@ -488,60 +705,54 @@ func (s *Store) AddTask(projectSlug string, task model.Task) (*model.Task, error
 		task.Tier = model.Tier3
 	}
 
-	if task.ParentID != "" {
-		parentFound := false
-		for _, existing := range p.Tasks {
-			if existing.ID == task.ParentID {
-				parentFound = true
-				break
+	err := s.withTx(func(tx *sql.Tx) error {
+		projectSlug = s.resolveSlug(tx, projectSlug)
+		var nextID int
+		err := tx.QueryRow(`SELECT next_task_id FROM projects WHERE slug = ?`, projectSlug).Scan(&nextID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("project '%s' not found", projectSlug)
+		}
+		if err != nil {
+			return err
+		}
+
+		if task.ParentID != "" && !taskExists(tx, projectSlug, task.ParentID) {
+			return fmt.Errorf("parent task #%s not found in project '%s'", task.ParentID, projectSlug)
+		}
+
+		deps, err := cleanDependsOn(tx, projectSlug, "", task.DependsOn)
+		if err != nil {
+			return err
+		}
+		task.DependsOn = deps
+
+		now := time.Now()
+		task.InsertedAt = now
+		task.UpdatedAt = now
+
+		// IDs are never reused, even after the highest task is deleted.
+		if task.ID == "" {
+			for taskExists(tx, projectSlug, strconv.Itoa(nextID)) {
+				nextID++
 			}
+			task.ID = strconv.Itoa(nextID)
+		} else if taskExists(tx, projectSlug, task.ID) {
+			return fmt.Errorf("task ID '%s' already exists in project '%s'", task.ID, projectSlug)
 		}
-		if !parentFound {
-			return nil, fmt.Errorf("parent task #%s not found in project '%s'", task.ParentID, projectSlug)
+		if n, err := strconv.Atoi(task.ID); err == nil && n >= nextID {
+			nextID = n + 1
 		}
-	}
 
-	var cleanDepends []string
-	seenDep := make(map[string]bool)
-	for _, depID := range task.DependsOn {
-		depID = strings.TrimSpace(depID)
-		if depID == "" || seenDep[depID] {
-			continue
+		if err := insertTask(tx, projectSlug, task); err != nil {
+			return err
 		}
-		seenDep[depID] = true
-		foundDep := false
-		for _, existing := range p.Tasks {
-			if existing.ID == depID {
-				foundDep = true
-				break
-			}
+		if _, err := tx.Exec(`UPDATE projects SET next_task_id = ?, updated_at = ? WHERE slug = ?`,
+			nextID, formatTime(now), projectSlug); err != nil {
+			return err
 		}
-		if !foundDep {
-			return nil, fmt.Errorf("dependency task #%s not found in project '%s'", depID, projectSlug)
-		}
-		cleanDepends = append(cleanDepends, depID)
-	}
-	task.DependsOn = cleanDepends
-
-	now := time.Now()
-	task.InsertedAt = now
-	task.UpdatedAt = now
-
-	// Auto-generate numeric ID if empty
-	if task.ID == "" {
-		maxID := 0
-		for _, existing := range p.Tasks {
-			if idNum, err := strconv.Atoi(existing.ID); err == nil && idNum > maxID {
-				maxID = idNum
-			}
-		}
-		task.ID = strconv.Itoa(maxID + 1)
-	}
-
-	p.Tasks = append(p.Tasks, task)
-	p.UpdatedAt = now
-
-	if err := s.saveProject(p); err != nil {
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -553,294 +764,199 @@ func (s *Store) AddTask(projectSlug string, task model.Task) (*model.Task, error
 	return &task, nil
 }
 
-func (s *Store) CompleteTask(projectSlug string, taskID string, done bool, resolution ...string) (*model.Task, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if projectSlug == "" {
-		projectSlug = s.config.ActiveProject
-	}
-	projectSlug = strings.ToLower(projectSlug)
-
-	p, ok := s.projects[projectSlug]
-	if !ok {
-		return nil, fmt.Errorf("project '%s' not found", projectSlug)
-	}
-
-	for i := range p.Tasks {
-		if p.Tasks[i].ID == taskID {
-			p.Tasks[i].Done = done
-			now := time.Now()
-			p.Tasks[i].UpdatedAt = now
-			if done {
-				p.Tasks[i].TerminatedAt = &now
-				if len(resolution) > 0 && resolution[0] != "" {
-					p.Tasks[i].Resolution = resolution[0]
-				}
-			} else {
-				p.Tasks[i].TerminatedAt = nil
-				p.Tasks[i].Deprecated = false
-			}
-			p.UpdatedAt = now
-
-			if err := s.saveProject(p); err != nil {
-				return nil, err
-			}
-
-			go s.notify(Event{
-				Type:        EventTaskCompleted,
-				ProjectSlug: projectSlug,
-				TaskID:      taskID,
-			})
-			return &p.Tasks[i], nil
+// mutateTask loads a task, applies fn and writes the task back, all in one
+// transaction. fn may return an error to abort without changes.
+func (s *Store) mutateTask(projectSlug, taskID string, fn func(tx *sql.Tx, slug string, t *model.Task) error) (string, *model.Task, error) {
+	var result model.Task
+	err := s.withTx(func(tx *sql.Tx) error {
+		projectSlug = s.resolveSlug(tx, projectSlug)
+		if err := projectExists(tx, projectSlug); err != nil {
+			return err
 		}
+		t, err := getTask(tx, projectSlug, taskID)
+		if err != nil {
+			return err
+		}
+		if err := fn(tx, projectSlug, &t); err != nil {
+			return err
+		}
+		if err := updateTaskRow(tx, projectSlug, t); err != nil {
+			return err
+		}
+		if err := touchProject(tx, projectSlug, t.UpdatedAt); err != nil {
+			return err
+		}
+		result = t
+		return nil
+	})
+	if err != nil {
+		return projectSlug, nil, err
 	}
-
-	return nil, fmt.Errorf("task ID '%s' not found in project '%s'", taskID, projectSlug)
+	return projectSlug, &result, nil
 }
 
-func (s *Store) UpdateTask(projectSlug string, task model.TaskUpdate) (*model.Task, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if projectSlug == "" {
-		projectSlug = s.config.ActiveProject
+func (s *Store) CompleteTask(projectSlug string, taskID string, done bool, resolution ...string) (*model.Task, error) {
+	slug, task, err := s.mutateTask(projectSlug, taskID, func(_ *sql.Tx, _ string, t *model.Task) error {
+		t.Done = done
+		now := time.Now()
+		t.UpdatedAt = now
+		if done {
+			t.TerminatedAt = &now
+			if len(resolution) > 0 && resolution[0] != "" {
+				t.Resolution = resolution[0]
+			}
+		} else {
+			t.TerminatedAt = nil
+			t.Deprecated = false
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	projectSlug = strings.ToLower(projectSlug)
 
-	p, ok := s.projects[projectSlug]
-	if !ok {
-		return nil, fmt.Errorf("project '%s' not found", projectSlug)
-	}
+	go s.notify(Event{
+		Type:        EventTaskCompleted,
+		ProjectSlug: slug,
+		TaskID:      taskID,
+	})
+	return task, nil
+}
 
-	for i := range p.Tasks {
-		if p.Tasks[i].ID == task.ID {
-			now := time.Now()
-			if task.Title != "" {
-				p.Tasks[i].Title = task.Title
+func (s *Store) UpdateTask(projectSlug string, upd model.TaskUpdate) (*model.Task, error) {
+	slug, task, err := s.mutateTask(projectSlug, upd.ID, func(tx *sql.Tx, slug string, t *model.Task) error {
+		if upd.Title != "" {
+			t.Title = upd.Title
+		}
+		if upd.Description != nil {
+			t.Description = *upd.Description
+		}
+		if upd.ParentID != "" {
+			if upd.ParentID == upd.ID {
+				return errors.New("a task cannot be its own parent")
 			}
-			if task.Description != nil {
-				p.Tasks[i].Description = *task.Description
-			}
-			if task.ParentID != "" {
-				if task.ParentID == task.ID {
-					return nil, errors.New("a task cannot be its own parent")
+			if upd.ParentID == "none" || upd.ParentID == "0" {
+				t.ParentID = ""
+			} else {
+				if !taskExists(tx, slug, upd.ParentID) {
+					return fmt.Errorf("parent task #%s not found in project '%s'", upd.ParentID, slug)
 				}
-				if task.ParentID == "none" || task.ParentID == "0" {
-					p.Tasks[i].ParentID = ""
-				} else {
-					parentFound := false
-					for _, existing := range p.Tasks {
-						if existing.ID == task.ParentID {
-							parentFound = true
-							break
-						}
+				// Cycle check: walk up from the new parent.
+				curr := upd.ParentID
+				for curr != "" {
+					if curr == upd.ID {
+						return errors.New("cannot set parent: circular dependency detected")
 					}
-					if !parentFound {
-						return nil, fmt.Errorf("parent task #%s not found in project '%s'", task.ParentID, projectSlug)
+					var next sql.NullString
+					if err := tx.QueryRow(`SELECT parent_id FROM tasks WHERE project_slug = ? AND id = ?`,
+						slug, curr).Scan(&next); err != nil && !errors.Is(err, sql.ErrNoRows) {
+						return err
 					}
-					// Cycle check
-					curr := task.ParentID
-					for curr != "" {
-						if curr == task.ID {
-							return nil, errors.New("cannot set parent: circular dependency detected")
-						}
-						next := ""
-						for _, existing := range p.Tasks {
-							if existing.ID == curr {
-								next = existing.ParentID
-								break
-							}
-						}
-						curr = next
-					}
-					p.Tasks[i].ParentID = task.ParentID
+					curr = next.String
 				}
+				t.ParentID = upd.ParentID
 			}
-			if task.Size != "" {
-				p.Tasks[i].Size = task.Size
+		}
+		if upd.Size != "" {
+			t.Size = upd.Size
+		}
+		if upd.DependsOn != nil {
+			deps, err := cleanDependsOn(tx, slug, upd.ID, upd.DependsOn)
+			if err != nil {
+				return err
 			}
-			if task.DependsOn != nil {
-				var cleanDepends []string
-				seenDep := make(map[string]bool)
-				for _, depID := range task.DependsOn {
-					depID = strings.TrimSpace(depID)
-					if depID == "" || seenDep[depID] {
-						continue
-					}
-					if depID == task.ID {
-						return nil, errors.New("a task cannot depend on itself")
-					}
-					seenDep[depID] = true
-					foundDep := false
-					for _, existing := range p.Tasks {
-						if existing.ID == depID {
-							foundDep = true
-							break
-						}
-					}
-					if !foundDep {
-						return nil, fmt.Errorf("dependency task #%s not found in project '%s'", depID, projectSlug)
-					}
-					cleanDepends = append(cleanDepends, depID)
-				}
 
-				// Cycle check in dependency graph
-				depMap := make(map[string][]string)
-				for _, t := range p.Tasks {
-					if t.ID == task.ID {
-						depMap[t.ID] = cleanDepends
-					} else {
-						depMap[t.ID] = t.DependsOn
-					}
-				}
+			depMap, err := loadDeps(tx, slug)
+			if err != nil {
+				return err
+			}
+			depMap[upd.ID] = deps
 
-				visited := make(map[string]bool)
-				recStack := make(map[string]bool)
-				var hasCycle func(curr string) bool
-				hasCycle = func(curr string) bool {
-					visited[curr] = true
-					recStack[curr] = true
-					for _, neighbor := range depMap[curr] {
-						if !visited[neighbor] {
-							if hasCycle(neighbor) {
-								return true
-							}
-						} else if recStack[neighbor] {
+			visited := make(map[string]bool)
+			recStack := make(map[string]bool)
+			var hasCycle func(curr string) bool
+			hasCycle = func(curr string) bool {
+				visited[curr] = true
+				recStack[curr] = true
+				for _, neighbor := range depMap[curr] {
+					if !visited[neighbor] {
+						if hasCycle(neighbor) {
 							return true
 						}
+					} else if recStack[neighbor] {
+						return true
 					}
-					recStack[curr] = false
-					return false
 				}
-
-				if hasCycle(task.ID) {
-					return nil, errors.New("cannot set dependency: circular dependency detected")
-				}
-
-				p.Tasks[i].DependsOn = cleanDepends
+				recStack[curr] = false
+				return false
 			}
-			if task.Tier > 0 {
-				p.Tasks[i].Tier = task.Tier
-			}
-			if task.Resolution != "" {
-				p.Tasks[i].Resolution = task.Resolution
-			}
-			if task.Assignee != "" {
-				p.Tasks[i].Assignee = task.Assignee
-			}
-			p.Tasks[i].UpdatedAt = now
-			p.UpdatedAt = now
-
-			if err := s.saveProject(p); err != nil {
-				return nil, err
+			if hasCycle(upd.ID) {
+				return errors.New("cannot set dependency: circular dependency detected")
 			}
 
-			go s.notify(Event{
-				Type:        EventTaskUpdated,
-				ProjectSlug: projectSlug,
-				TaskID:      task.ID,
-			})
-			return &p.Tasks[i], nil
+			t.DependsOn = deps
+			if err := replaceDeps(tx, slug, upd.ID, deps); err != nil {
+				return err
+			}
 		}
+		if upd.Tier > 0 {
+			t.Tier = upd.Tier
+		}
+		if upd.Resolution != "" {
+			t.Resolution = upd.Resolution
+		}
+		if upd.Assignee != "" {
+			t.Assignee = upd.Assignee
+		}
+		t.UpdatedAt = time.Now()
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, fmt.Errorf("task ID '%s' not found in project '%s'", task.ID, projectSlug)
+	go s.notify(Event{
+		Type:        EventTaskUpdated,
+		ProjectSlug: slug,
+		TaskID:      upd.ID,
+	})
+	return task, nil
 }
 
 func (s *Store) AssignTask(projectSlug string, taskID string, assignee string) (*model.Task, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if projectSlug == "" {
-		projectSlug = s.config.ActiveProject
-	}
-	projectSlug = strings.ToLower(projectSlug)
-
-	p, ok := s.projects[projectSlug]
-	if !ok {
-		return nil, fmt.Errorf("project '%s' not found", projectSlug)
+	slug, task, err := s.mutateTask(projectSlug, taskID, func(_ *sql.Tx, _ string, t *model.Task) error {
+		t.Assignee = strings.TrimSpace(assignee)
+		t.UpdatedAt = time.Now()
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	for i := range p.Tasks {
-		if p.Tasks[i].ID == taskID {
-			p.Tasks[i].Assignee = strings.TrimSpace(assignee)
-			now := time.Now()
-			p.Tasks[i].UpdatedAt = now
-			p.UpdatedAt = now
-
-			if err := s.saveProject(p); err != nil {
-				return nil, err
-			}
-
-			go s.notify(Event{
-				Type:        EventTaskUpdated,
-				ProjectSlug: projectSlug,
-				TaskID:      taskID,
-			})
-			return &p.Tasks[i], nil
-		}
-	}
-
-	return nil, fmt.Errorf("task ID '%s' not found in project '%s'", taskID, projectSlug)
+	go s.notify(Event{
+		Type:        EventTaskUpdated,
+		ProjectSlug: slug,
+		TaskID:      taskID,
+	})
+	return task, nil
 }
 
 func (s *Store) DeleteTask(projectSlug string, taskID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if projectSlug == "" {
-		projectSlug = s.config.ActiveProject
-	}
-	projectSlug = strings.ToLower(projectSlug)
-
-	p, ok := s.projects[projectSlug]
-	if !ok {
-		return fmt.Errorf("project '%s' not found", projectSlug)
-	}
-
-	// Verify taskID exists
-	found := false
-	for _, t := range p.Tasks {
-		if t.ID == taskID {
-			found = true
-			break
+	err := s.withTx(func(tx *sql.Tx) error {
+		projectSlug = s.resolveSlug(tx, projectSlug)
+		if err := projectExists(tx, projectSlug); err != nil {
+			return err
 		}
-	}
-	if !found {
-		return fmt.Errorf("task ID '%s' not found in project '%s'", taskID, projectSlug)
-	}
-
-	// Find all descendant tasks to delete recursively
-	toDelete := map[string]bool{taskID: true}
-	added := true
-	for added {
-		added = false
-		for _, t := range p.Tasks {
-			if !toDelete[t.ID] && toDelete[t.ParentID] {
-				toDelete[t.ID] = true
-				added = true
-			}
+		if !taskExists(tx, projectSlug, taskID) {
+			return fmt.Errorf("task ID '%s' not found in project '%s'", taskID, projectSlug)
 		}
-	}
-
-	var remaining []model.Task
-	for _, t := range p.Tasks {
-		if !toDelete[t.ID] {
-			var cleanDep []string
-			for _, d := range t.DependsOn {
-				if !toDelete[d] {
-					cleanDep = append(cleanDep, d)
-				}
-			}
-			t.DependsOn = cleanDep
-			remaining = append(remaining, t)
+		// Subtasks and dependency edges go by cascade.
+		if _, err := tx.Exec(`DELETE FROM tasks WHERE project_slug = ? AND id = ?`, projectSlug, taskID); err != nil {
+			return err
 		}
-	}
-	p.Tasks = remaining
-	p.UpdatedAt = time.Now()
-
-	if err := s.saveProject(p); err != nil {
+		return touchProject(tx, projectSlug, time.Now())
+	})
+	if err != nil {
 		return err
 	}
 
@@ -855,62 +971,42 @@ func (s *Store) DeleteTask(projectSlug string, taskID string) error {
 // GetMCPUserInstructions returns the user-defined portion of MCP instructions.
 // Returns an empty string when the user has not set custom instructions yet.
 func (s *Store) GetMCPUserInstructions() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.config.MCPUserInstructions
+	v, _ := getSetting(s.db, settingMCPUserInstructions)
+	return v
 }
 
 // SaveMCPUserInstructions persists the user-defined portion of MCP instructions.
 func (s *Store) SaveMCPUserInstructions(instructions string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.config.MCPUserInstructions = instructions
-	return s.saveConfig()
+	return s.withTx(func(tx *sql.Tx) error {
+		return setSetting(tx, settingMCPUserInstructions, instructions)
+	})
 }
 
 // DeprecateTask marks a task as deprecated and completed (or undeprecates it).
 func (s *Store) DeprecateTask(projectSlug string, taskID string, deprecated bool) (*model.Task, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if projectSlug == "" {
-		projectSlug = s.config.ActiveProject
-	}
-	projectSlug = strings.ToLower(projectSlug)
-
-	p, ok := s.projects[projectSlug]
-	if !ok {
-		return nil, fmt.Errorf("project '%s' not found", projectSlug)
-	}
-
-	for i := range p.Tasks {
-		if p.Tasks[i].ID == taskID {
-			p.Tasks[i].Deprecated = deprecated
-			now := time.Now()
-			p.Tasks[i].UpdatedAt = now
-			if deprecated {
-				p.Tasks[i].Done = true
-				if p.Tasks[i].TerminatedAt == nil {
-					p.Tasks[i].TerminatedAt = &now
-				}
-				if p.Tasks[i].Resolution == "" {
-					p.Tasks[i].Resolution = "Deprecated: no longer applicable according to project specification."
-				}
+	slug, task, err := s.mutateTask(projectSlug, taskID, func(_ *sql.Tx, _ string, t *model.Task) error {
+		t.Deprecated = deprecated
+		now := time.Now()
+		t.UpdatedAt = now
+		if deprecated {
+			t.Done = true
+			if t.TerminatedAt == nil {
+				t.TerminatedAt = &now
 			}
-			p.UpdatedAt = now
-
-			if err := s.saveProject(p); err != nil {
-				return nil, err
+			if t.Resolution == "" {
+				t.Resolution = "Deprecated: no longer applicable according to project specification."
 			}
-
-			go s.notify(Event{
-				Type:        EventTaskUpdated,
-				ProjectSlug: projectSlug,
-				TaskID:      taskID,
-			})
-			return &p.Tasks[i], nil
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, fmt.Errorf("task ID '%s' not found in project '%s'", taskID, projectSlug)
+	go s.notify(Event{
+		Type:        EventTaskUpdated,
+		ProjectSlug: slug,
+		TaskID:      taskID,
+	})
+	return task, nil
 }

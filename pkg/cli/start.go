@@ -36,6 +36,12 @@ func runStartApp(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if path, err := st.AutoBackup(14); err != nil {
+		log.Printf("[Backlog] Daily backup failed: %v", err)
+	} else if path != "" {
+		log.Printf("[Backlog] Daily backup written to %s", path)
+	}
+
 	if proj := resolveProject(flagProject); proj != "" {
 		_ = st.SetActiveProject(proj)
 	}
