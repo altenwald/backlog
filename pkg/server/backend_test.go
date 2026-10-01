@@ -269,7 +269,7 @@ func TestClientBackend(t *testing.T) {
 	}
 
 	// Spec sections over HTTP
-	sec, err := be.AddSpecSection("spec-client-proj", "Scope", "Ticket #1", -1)
+	sec, err := be.AddSpecSection("spec-client-proj", "", "Scope", "Ticket #1", -1)
 	if err != nil || sec.ID != "scope" {
 		t.Fatalf("AddSpecSection via clientBackend: %+v err=%v", sec, err)
 	}
@@ -281,7 +281,7 @@ func TestClientBackend(t *testing.T) {
 		t.Fatalf("MoveSpecSection via clientBackend: %v", err)
 	}
 	infos, err := be.ListSpecSections("spec-client-proj")
-	if err != nil || len(infos) != 2 || infos[0].ID != "scope" || infos[0].Size != len(newBody) {
+	if err != nil || len(infos) != 2 || infos[0].ID != "main" || infos[1].ID != "scope" || infos[1].Size != len(newBody) {
 		t.Fatalf("ListSpecSections via clientBackend: %+v err=%v", infos, err)
 	}
 	secs, err := be.GetSpecSections("spec-client-proj", []string{"scope"})

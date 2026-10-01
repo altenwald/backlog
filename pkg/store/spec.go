@@ -8,7 +8,7 @@ import (
 	"github.com/altenwald/backlog/pkg/model"
 )
 
-// Spec sections are replaced copy-on-write: every mutation builds a new slice,
+// Spec pages (sections) are replaced copy-on-write: every mutation builds a new slice,
 // so projects returned by GetProject keep a consistent view.
 
 // specProject resolves a project slug (empty means the active project).
@@ -100,19 +100,21 @@ func (s *Store) GetSpecSections(slug string, ids []string) ([]model.SpecSection,
 	for _, id := range ids {
 		i := sectionIndex(p.Spec, id)
 		if i < 0 {
-			return nil, fmt.Errorf("spec section '%s' not found in project '%s'", id, slug)
+			return nil, fmt.Errorf("spec page '%s' not found in project '%s'", id, slug)
 		}
 		out = append(out, p.Spec[i])
 	}
 	return out, nil
 }
 
-// AddSpecSection inserts a new section at position (0-based); a negative or
-// out-of-range position appends it at the end.
-func (s *Store) AddSpecSection(slug, title, body string, position int) (*model.SpecSection, error) {
+// AddSpecSection inserts a new page at position (0-based, after the main
+// page); a negative or out-of-range position appends it at the end. An empty
+// id is derived from the title; a given id (e.g. from a link to a missing
+// page) must not exist yet.
+func (s *Store) AddSpecSection(slug, id, title, body string, position int) (*model.SpecSection, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
-		return nil, fmt.Errorf("section title is required")
+		return nil, fmt.Errorf("page title is required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -120,23 +122,31 @@ func (s *Store) AddSpecSection(slug, title, body string, position int) (*model.S
 	if err != nil {
 		return nil, err
 	}
-	taken := make(map[string]bool, len(p.Spec))
-	for _, sec := range p.Spec {
+	spec := model.NormalizeSpec(p.Spec, time.Now())
+	if len(spec) == 0 {
+		spec = []model.SpecSection{{ID: model.SpecMainID, Title: model.SpecMainTitle, UpdatedAt: time.Now()}}
+	}
+	taken := make(map[string]bool, len(spec))
+	for _, sec := range spec {
 		taken[sec.ID] = true
 	}
-	sec := model.SpecSection{
-		ID:        model.UniqueSectionID(title, taken),
-		Title:     title,
-		Body:      strings.TrimSpace(body),
-		UpdatedAt: time.Now(),
+	if id = strings.TrimSpace(id); id == "" {
+		id = model.UniqueSectionID(title, taken)
+	} else if id != model.SlugifySectionTitle(id) {
+		return nil, fmt.Errorf("invalid page id '%s': use lowercase letters, digits and dashes", id)
+	} else if taken[id] {
+		return nil, fmt.Errorf("spec page '%s' already exists in project '%s'", id, slug)
 	}
-	if position < 0 || position > len(p.Spec) {
-		position = len(p.Spec)
+	body = strings.TrimSpace(body)
+	sec := model.SpecSection{ID: id, Title: title, Body: body, Links: model.ParseSpecLinks(body), UpdatedAt: time.Now()}
+	if position < 0 || position > len(spec) {
+		position = len(spec)
 	}
-	sections := make([]model.SpecSection, 0, len(p.Spec)+1)
-	sections = append(sections, p.Spec[:position]...)
+	position = max(position, 1) // the main page stays first
+	sections := make([]model.SpecSection, 0, len(spec)+1)
+	sections = append(sections, spec[:position]...)
 	sections = append(sections, sec)
-	sections = append(sections, p.Spec[position:]...)
+	sections = append(sections, spec[position:]...)
 	if err := s.commitSpec(p, slug, sec.ID, sections); err != nil {
 		return nil, err
 	}
@@ -152,11 +162,16 @@ func (s *Store) UpdateSpecSection(slug, id string, title, body *string) (*model.
 	if err != nil {
 		return nil, err
 	}
-	i := sectionIndex(p.Spec, id)
-	if i < 0 {
-		return nil, fmt.Errorf("spec section '%s' not found in project '%s'", id, slug)
+	spec := p.Spec
+	if len(spec) == 0 && id == model.SpecMainID {
+		// The main page of an empty specification is created on first write.
+		spec = []model.SpecSection{{ID: model.SpecMainID, Title: model.SpecMainTitle}}
 	}
-	sec := p.Spec[i]
+	i := sectionIndex(spec, id)
+	if i < 0 {
+		return nil, fmt.Errorf("spec page '%s' not found in project '%s'", id, slug)
+	}
+	sec := spec[i]
 	if title != nil {
 		t := strings.TrimSpace(*title)
 		if t == "" {
@@ -166,9 +181,10 @@ func (s *Store) UpdateSpecSection(slug, id string, title, body *string) (*model.
 	}
 	if body != nil {
 		sec.Body = strings.TrimSpace(*body)
+		sec.Links = model.ParseSpecLinks(sec.Body)
 	}
 	sec.UpdatedAt = time.Now()
-	sections := append([]model.SpecSection(nil), p.Spec...)
+	sections := append([]model.SpecSection(nil), spec...)
 	sections[i] = sec
 	if err := s.commitSpec(p, slug, sec.ID, sections); err != nil {
 		return nil, err
@@ -176,8 +192,12 @@ func (s *Store) UpdateSpecSection(slug, id string, title, body *string) (*model.
 	return &sec, nil
 }
 
-// DeleteSpecSection removes a section.
+// DeleteSpecSection removes a page. The main page cannot be deleted; links
+// to the removed page are kept and show up as missing pages.
 func (s *Store) DeleteSpecSection(slug, id string) error {
+	if id == model.SpecMainID {
+		return fmt.Errorf("the main spec page cannot be deleted")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p, slug, err := s.specProject(slug)
@@ -186,7 +206,7 @@ func (s *Store) DeleteSpecSection(slug, id string) error {
 	}
 	i := sectionIndex(p.Spec, id)
 	if i < 0 {
-		return fmt.Errorf("spec section '%s' not found in project '%s'", id, slug)
+		return fmt.Errorf("spec page '%s' not found in project '%s'", id, slug)
 	}
 	sections := make([]model.SpecSection, 0, len(p.Spec)-1)
 	sections = append(sections, p.Spec[:i]...)
@@ -194,8 +214,12 @@ func (s *Store) DeleteSpecSection(slug, id string) error {
 	return s.commitSpec(p, slug, id, sections)
 }
 
-// MoveSpecSection moves a section to position (0-based, clamped to range).
+// MoveSpecSection moves a page to position (0-based, clamped to range). The
+// main page always stays first.
 func (s *Store) MoveSpecSection(slug, id string, position int) error {
+	if id == model.SpecMainID {
+		return fmt.Errorf("the main spec page cannot be moved")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p, slug, err := s.specProject(slug)
@@ -204,9 +228,9 @@ func (s *Store) MoveSpecSection(slug, id string, position int) error {
 	}
 	i := sectionIndex(p.Spec, id)
 	if i < 0 {
-		return fmt.Errorf("spec section '%s' not found in project '%s'", id, slug)
+		return fmt.Errorf("spec page '%s' not found in project '%s'", id, slug)
 	}
-	position = max(0, min(position, len(p.Spec)-1))
+	position = max(1, min(position, len(p.Spec)-1))
 	if position == i {
 		return nil
 	}

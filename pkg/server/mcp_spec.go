@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/altenwald/backlog/pkg/model"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -46,9 +47,9 @@ func registerSpecTools(s *server.MCPServer, be Backend) {
 	s.AddTool(
 		mcp.NewTool(
 			"get_project_spec",
-			mcp.WithDescription("Read the project specification. Without 'sections' it returns only the section index (id, title, size in bytes); pass section IDs to read their content, or full=true for the whole markdown document."),
+			mcp.WithDescription("Read the project specification, a wiki of linked pages. Without 'sections' it returns the main page (the entry point and index) plus the page list (id, title, size, outgoing links) without bodies. Links between pages are markdown links like [text](spec:<page-id>); pass page IDs in 'sections' to read only those pages, or full=true for the whole document."),
 			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
-			mcp.WithArray("sections", mcp.Description("IDs of the sections to read"), mcp.WithStringItems()),
+			mcp.WithArray("sections", mcp.Description("IDs of the pages to read"), mcp.WithStringItems()),
 			mcp.WithBoolean("full", mcp.Description("Return the whole specification as one markdown document (expensive on large projects)")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -74,7 +75,24 @@ func registerSpecTools(s *server.MCPServer, be Backend) {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			return jsonToolResult(map[string]any{"project": project, "index": infos}), nil
+			res := map[string]any{"project": project, "pages": infos}
+			if len(infos) > 0 {
+				main, err := be.GetSpecSections(project, []string{model.SpecMainID})
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+				res["main"] = main[0]
+				if unreachable := model.SpecUnreachable(infos); len(unreachable) > 0 {
+					var ids []string
+					for _, info := range infos {
+						if unreachable[info.ID] {
+							ids = append(ids, info.ID)
+						}
+					}
+					res["unlinked"] = ids
+				}
+			}
+			return jsonToolResult(res), nil
 		},
 	)
 
@@ -82,7 +100,7 @@ func registerSpecTools(s *server.MCPServer, be Backend) {
 	s.AddTool(
 		mcp.NewTool(
 			"update_project_spec",
-			mcp.WithDescription("Replace the whole project specification. The markdown is split into sections at each '## ' heading (text before the first heading becomes 'Overview'). Prefer the per-section tools for incremental changes."),
+			mcp.WithDescription("Replace the whole project specification. The markdown is split into pages at each '## ' heading; text before the first heading becomes the main page, which gets links to any page it does not reference. Prefer the per-page tools for incremental changes."),
 			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
 			mcp.WithString("specification", mcp.Description("Markdown content of the composite project specification"), mcp.Required()),
 		),
@@ -102,22 +120,23 @@ func registerSpecTools(s *server.MCPServer, be Backend) {
 	s.AddTool(
 		mcp.NewTool(
 			"add_spec_section",
-			mcp.WithDescription("Add a new section to the project specification. Its ID is derived from the title."),
+			mcp.WithDescription("Add a new page to the project specification. Remember to link it from the main page or another page with [text](spec:<page-id>) so it is reachable."),
 			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
-			mcp.WithString("title", mcp.Description("Section title, without the leading '## '"), mcp.Required()),
-			mcp.WithString("body", mcp.Description("Markdown content of the section")),
-			mcp.WithNumber("position", mcp.Description("0-based position in the index; omit to append at the end")),
+			mcp.WithString("title", mcp.Description("Page title"), mcp.Required()),
+			mcp.WithString("section", mcp.Description("Page ID (lowercase letters, digits and dashes); derived from the title when omitted. Use it to create a page that is already linked.")),
+			mcp.WithString("body", mcp.Description("Markdown content of the page")),
+			mcp.WithNumber("position", mcp.Description("Position in the page list (the main page is always 0); omit to append at the end")),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			project, errRes := requireProject(req)
 			if errRes != nil {
 				return errRes, nil
 			}
-			sec, err := be.AddSpecSection(project, req.GetString("title", ""), req.GetString("body", ""), req.GetInt("position", -1))
+			sec, err := be.AddSpecSection(project, req.GetString("section", ""), req.GetString("title", ""), req.GetString("body", ""), req.GetInt("position", -1))
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			return mcp.NewToolResultText(fmt.Sprintf("✔ Section '%s' added to '%s'.", sec.ID, project)), nil
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Page '%s' added to '%s'.", sec.ID, project)), nil
 		},
 	)
 
@@ -125,9 +144,9 @@ func registerSpecTools(s *server.MCPServer, be Backend) {
 	s.AddTool(
 		mcp.NewTool(
 			"update_spec_section",
-			mcp.WithDescription("Update the title and/or body of one specification section. Omitted fields are left unchanged; the section ID stays the same when renamed."),
+			mcp.WithDescription("Update the title and/or body of one specification page (use section=\"main\" for the main page). Omitted fields are left unchanged; the page ID, and so links to it, stays the same when renamed."),
 			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
-			mcp.WithString("section", mcp.Description("Section ID (required)"), mcp.Required()),
+			mcp.WithString("section", mcp.Description("Page ID (required)"), mcp.Required()),
 			mcp.WithString("title", mcp.Description("New title")),
 			mcp.WithString("body", mcp.Description("New markdown content, replacing the current body")),
 		),
@@ -147,7 +166,7 @@ func registerSpecTools(s *server.MCPServer, be Backend) {
 			if _, err := be.UpdateSpecSection(project, id, title, body); err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			return mcp.NewToolResultText(fmt.Sprintf("✔ Section '%s' in '%s' updated.", id, project)), nil
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Page '%s' in '%s' updated.", id, project)), nil
 		},
 	)
 
@@ -155,9 +174,9 @@ func registerSpecTools(s *server.MCPServer, be Backend) {
 	s.AddTool(
 		mcp.NewTool(
 			"move_spec_section",
-			mcp.WithDescription("Move a specification section to another position in the index."),
+			mcp.WithDescription("Move a specification page to another position in the page list. The main page always stays first."),
 			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
-			mcp.WithString("section", mcp.Description("Section ID (required)"), mcp.Required()),
+			mcp.WithString("section", mcp.Description("Page ID (required)"), mcp.Required()),
 			mcp.WithNumber("position", mcp.Description("New 0-based position (required)"), mcp.Required()),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -172,7 +191,7 @@ func registerSpecTools(s *server.MCPServer, be Backend) {
 			if err := be.MoveSpecSection(project, id, req.GetInt("position", 0)); err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			return mcp.NewToolResultText(fmt.Sprintf("✔ Section '%s' in '%s' moved.", id, project)), nil
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Page '%s' in '%s' moved.", id, project)), nil
 		},
 	)
 
@@ -180,9 +199,9 @@ func registerSpecTools(s *server.MCPServer, be Backend) {
 	s.AddTool(
 		mcp.NewTool(
 			"delete_spec_section",
-			mcp.WithDescription("Delete one section of the project specification."),
+			mcp.WithDescription("Delete one page of the project specification (not the main page). Links to it remain and show as missing pages, so update the pages that reference it."),
 			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
-			mcp.WithString("section", mcp.Description("Section ID (required)"), mcp.Required()),
+			mcp.WithString("section", mcp.Description("Page ID (required)"), mcp.Required()),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			project, errRes := requireProject(req)
@@ -196,7 +215,7 @@ func registerSpecTools(s *server.MCPServer, be Backend) {
 			if err := be.DeleteSpecSection(project, id); err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			return mcp.NewToolResultText(fmt.Sprintf("✔ Section '%s' deleted from '%s'.", id, project)), nil
+			return mcp.NewToolResultText(fmt.Sprintf("✔ Page '%s' deleted from '%s'.", id, project)), nil
 		},
 	)
 }

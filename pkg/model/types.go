@@ -177,6 +177,8 @@ func (p *Project) UnmarshalJSON(data []byte) error {
 	}
 	if len(p.Spec) == 0 && strings.TrimSpace(aux.LegacySpecification) != "" {
 		p.Spec = SplitSpec(aux.LegacySpecification, p.UpdatedAt)
+	} else {
+		p.Spec = NormalizeSpec(p.Spec, p.UpdatedAt)
 	}
 	return nil
 }

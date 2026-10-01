@@ -3,10 +3,12 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
 	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/store"
 )
@@ -206,8 +208,28 @@ func TestOtherDialogs(t *testing.T) {
 	_ = deletedProject
 }
 
-func TestSpecViewSections(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "backlog-ui-spec-refresh-*")
+func findSpecLink(segs []widget.RichTextSegment, text string) *widget.HyperlinkSegment {
+	for _, seg := range segs {
+		switch s := seg.(type) {
+		case *widget.HyperlinkSegment:
+			if strings.HasPrefix(s.Text, text) {
+				return s
+			}
+		case *widget.ParagraphSegment:
+			if l := findSpecLink(s.Texts, text); l != nil {
+				return l
+			}
+		case *widget.ListSegment:
+			if l := findSpecLink(s.Items, text); l != nil {
+				return l
+			}
+		}
+	}
+	return nil
+}
+
+func TestSpecViewWiki(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "backlog-ui-spec-wiki-*")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,27 +243,58 @@ func TestSpecViewSections(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = st.SetActiveProject("test-proj")
-	_ = st.UpdateProjectSpecification("test-proj", "Intro\n\n## Scope\n\nTicket #1")
+	_ = st.UpdateProjectSpecification("test-proj", "Intro, see [the plan](spec:plan)\n\n## Scope\n\nTicket #1")
 
 	a := test.NewApp()
 	w := a.NewWindow("Test")
 	v := NewSpecView(st, w)
 
-	// Initial load selects the first section and only loads its body.
+	// The main page opens first; split pages are linked from it.
 	v.Refresh()
-	if len(v.index) != 2 || v.selectedID != "overview" || v.bodyEntry.Text != "Intro" {
-		t.Fatalf("unexpected initial state: index=%+v selected=%q body=%q", v.index, v.selectedID, v.bodyEntry.Text)
+	if v.selectedID != model.SpecMainID || len(v.index) != 2 {
+		t.Fatalf("unexpected initial state: selected=%q index=%+v", v.selectedID, v.index)
 	}
 
-	// Selecting another section loads it.
-	v.sectionList.Select(1)
+	// Following a link opens the page, and Back returns.
+	link := findSpecLink(v.richText.Segments, "Scope")
+	if link == nil {
+		t.Fatal("expected a link to the scope page")
+	}
+	link.OnTapped()
 	if v.selectedID != "scope" || v.bodyEntry.Text != "Ticket #1" {
-		t.Fatalf("expected scope section, got %q / %q", v.selectedID, v.bodyEntry.Text)
+		t.Fatalf("expected scope page, got %q / %q", v.selectedID, v.bodyEntry.Text)
+	}
+	if findSpecLink(v.richText.Segments, model.SpecMainTitle) == nil {
+		t.Fatal("expected a 'Linked from' backlink to the main page")
+	}
+	v.Back()
+	if v.selectedID != model.SpecMainID {
+		t.Fatalf("expected Back to return to main, got %q", v.selectedID)
 	}
 
-	// External update (MCP / CLI / API) of the selected section is reflected.
-	body := "Ticket #1 and #2"
-	if _, err := st.UpdateSpecSection("test-proj", "scope", nil, &body); err != nil {
+	// A link to a missing page is marked and creates it with the linked id.
+	missing := findSpecLink(v.richText.Segments, "the plan")
+	if missing == nil || !strings.HasSuffix(missing.Text, specMissingSuffix) {
+		t.Fatalf("expected a missing-page link, got %+v", missing)
+	}
+	v.createPage("plan", "The plan")
+	if v.selectedID != "plan" || !v.editMode {
+		t.Fatalf("expected new page open in edit mode, got %q edit=%v", v.selectedID, v.editMode)
+	}
+
+	// Edits are saved to the open page only, with an inserted link.
+	v.bodyEntry.SetText("Steps: ")
+	v.bodyEntry.CursorRow, v.bodyEntry.CursorColumn = 0, 7
+	insertAtCursor(v.bodyEntry, model.SpecLink("Scope", "scope"))
+	v.saveBtn.OnTapped()
+	pages, _ := st.GetSpecSections("test-proj", []string{"plan"})
+	if pages[0].Body != "Steps: [Scope](spec:scope)" || v.modified {
+		t.Fatalf("unexpected saved page %+v (modified=%v)", pages[0], v.modified)
+	}
+
+	// External updates of the open page are reflected.
+	body := "Updated via MCP"
+	if _, err := st.UpdateSpecSection("test-proj", "plan", nil, &body); err != nil {
 		t.Fatal(err)
 	}
 	v.Refresh()
@@ -249,32 +302,18 @@ func TestSpecViewSections(t *testing.T) {
 		t.Fatalf("expected external update, got %q (status %q)", v.bodyEntry.Text, v.status.Text)
 	}
 
-	// Local edits are tracked and saved to the section only.
-	v.setEditMode(true)
-	v.bodyEntry.SetText("Draft 🚀 -> done")
-	if !v.modified || v.status.Text != "Unsaved changes" {
-		t.Fatalf("expected unsaved changes, got modified=%v status=%q", v.modified, v.status.Text)
+	// An unreachable page is flagged; deleting the open page falls back to main.
+	if _, err := st.AddSpecSection("test-proj", "", "Orphan", "", -1); err != nil {
+		t.Fatal(err)
 	}
-	v.saveBtn.OnTapped()
-	if v.modified || v.status.Text != "Saved" || v.editMode {
-		t.Fatalf("expected saved state, got modified=%v status=%q edit=%v", v.modified, v.status.Text, v.editMode)
-	}
-	sections, _ := st.GetSpecSections("test-proj", []string{"scope", "overview"})
-	if sections[0].Body != "Draft 🚀 -> done" || sections[1].Body != "Intro" {
-		t.Fatalf("unexpected stored sections: %+v", sections)
-	}
-
-	// Moving the selected section up reorders the index.
-	v.upBtn.OnTapped()
-	if v.index[0].ID != "scope" {
-		t.Fatalf("expected scope first after move, got %+v", v.index)
-	}
-
-	// Deleting the selected section in the store falls back to the first one.
-	_ = st.DeleteSpecSection("test-proj", "scope")
 	v.Refresh()
-	if v.selectedID != "overview" || len(v.index) != 1 {
-		t.Fatalf("expected fallback to overview, got %q / %+v", v.selectedID, v.index)
+	if !v.unlinked["orphan"] {
+		t.Fatalf("expected orphan page to be unlinked, got %v", v.unlinked)
+	}
+	_ = st.DeleteSpecSection("test-proj", "plan")
+	v.Refresh()
+	if v.selectedID != model.SpecMainID {
+		t.Fatalf("expected fallback to main, got %q", v.selectedID)
 	}
 }
 

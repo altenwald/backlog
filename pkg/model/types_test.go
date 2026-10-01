@@ -148,8 +148,8 @@ func TestTaskDeprecatedAndSpecification(t *testing.T) {
 	if err := json.Unmarshal(legacy, &unmarshaledProj); err != nil {
 		t.Fatalf("Unmarshal proj failed: %v", err)
 	}
-	if len(unmarshaledProj.Spec) != 2 || unmarshaledProj.Spec[0].ID != "overview" || unmarshaledProj.Spec[1].ID != "scope" {
-		t.Fatalf("expected overview and scope sections, got %+v", unmarshaledProj.Spec)
+	if len(unmarshaledProj.Spec) != 2 || unmarshaledProj.Spec[0].ID != model.SpecMainID || unmarshaledProj.Spec[1].ID != "scope" {
+		t.Fatalf("expected main and scope pages, got %+v", unmarshaledProj.Spec)
 	}
 	projData, err := json.Marshal(unmarshaledProj)
 	if err != nil {
@@ -159,7 +159,8 @@ func TestTaskDeprecatedAndSpecification(t *testing.T) {
 	if err := json.Unmarshal(projData, &roundTrip); err != nil {
 		t.Fatalf("Unmarshal proj failed: %v", err)
 	}
-	if got := model.JoinSpec(roundTrip.Spec); got != "Composite project definition referencing #10\n\n## Scope\n\nTicket #10" {
+	want := "Composite project definition referencing #10\n\n- [Scope](spec:scope)\n\n## Scope\n\nTicket #10"
+	if got := model.JoinSpec(roundTrip.Spec); got != want {
 		t.Fatalf("unexpected joined spec %q", got)
 	}
 }

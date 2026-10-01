@@ -15,20 +15,26 @@ import (
 )
 
 const (
-	specEmptyMarkdown     = "*No specification sections yet. Click 'Add section' or update via MCP to define project architecture & scope.*"
+	specEmptyMarkdown     = "*No specification yet. Click 'Edit' to write the main page, or update it via MCP.*"
 	specNoProjectMarkdown = "*No project selected.*"
+	specEmptyPageMarkdown = "*This page is empty. Click 'Edit' to write it.*"
+	specMissingSuffix     = " (new page)"
 )
 
-// SpecView shows the project specification as a list of sections. Only the
-// selected section is loaded and rendered, so large specifications stay cheap.
+// SpecView shows the project specification as a wiki: a main page that links
+// to other pages, which can link to each other. Only the open page is loaded
+// and rendered, so large specifications stay cheap.
 type SpecView struct {
 	Container fyne.CanvasObject
 
 	store  *store.Store
 	window fyne.Window
 
-	sectionList *widget.List
-	index       []model.SpecSectionInfo
+	pageList   *widget.List
+	index      []model.SpecSectionInfo
+	unlinked   map[string]bool
+	history    []string // pages visited before the open one, for Back
+	navigating bool     // true while the view selects a list row itself
 
 	titleEntry   *widget.Entry
 	titleLabel   *widget.Label
@@ -39,12 +45,12 @@ type SpecView struct {
 	editFields   *fyne.Container
 	status       *widget.Label
 
-	previewBtn, editBtn, saveBtn *widget.Button
-	upBtn, downBtn, deleteBtn    *widget.Button
+	backBtn, previewBtn, editBtn, saveBtn, linkBtn *widget.Button
+	upBtn, downBtn, deleteBtn                      *widget.Button
 
 	slug       string
 	selectedID string
-	loaded     model.SpecSection // last stored version of the selected section
+	loaded     model.SpecSection // last stored version of the open page
 	editMode   bool
 	modified   bool
 	syncing    bool // true while the view itself sets entry text
@@ -53,22 +59,30 @@ type SpecView struct {
 func NewSpecView(st *store.Store, win fyne.Window) *SpecView {
 	v := &SpecView{store: st, window: win}
 
-	v.sectionList = widget.NewList(
+	v.pageList = widget.NewList(
 		func() int { return len(v.index) },
 		func() fyne.CanvasObject {
-			l := widget.NewLabel("Section")
+			l := widget.NewLabel("Page")
 			l.Truncation = fyne.TextTruncateEllipsis
 			return l
 		},
 		func(id widget.ListItemID, o fyne.CanvasObject) {
-			if id < len(v.index) {
-				o.(*widget.Label).SetText(v.index[id].Title)
+			if id >= len(v.index) {
+				return
 			}
+			info := v.index[id]
+			l := o.(*widget.Label)
+			l.TextStyle = fyne.TextStyle{Bold: info.ID == model.SpecMainID, Italic: v.unlinked[info.ID]}
+			text := info.Title
+			if v.unlinked[info.ID] {
+				text += " (unlinked)"
+			}
+			l.SetText(text)
 		},
 	)
-	v.sectionList.OnSelected = func(id widget.ListItemID) {
-		if id < len(v.index) && v.index[id].ID != v.selectedID {
-			v.selectSection(v.index[id].ID)
+	v.pageList.OnSelected = func(id widget.ListItemID) {
+		if !v.navigating && id < len(v.index) && v.index[id].ID != v.selectedID {
+			v.Open(v.index[id].ID)
 		}
 	}
 
@@ -79,23 +93,30 @@ func NewSpecView(st *store.Store, win fyne.Window) *SpecView {
 	v.titleLabel = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	v.titleLabel.Truncation = fyne.TextTruncateEllipsis
 	v.titleEntry = widget.NewEntry()
-	v.titleEntry.SetPlaceHolder("Section title")
+	v.titleEntry.SetPlaceHolder("Page title")
 	v.bodyEntry = widget.NewMultiLineEntry()
 	v.bodyEntry.Wrapping = fyne.TextWrapWord
-	v.bodyEntry.SetPlaceHolder("Write this section in markdown...\n\nReference ticket IDs explicitly (e.g. #1, #2). Tickets not referenced in the specification are considered out of scope or deprecated.")
+	v.bodyEntry.SetPlaceHolder("Write this page in markdown...\n\nLink other pages with [text](spec:page-id); a link to a page that does not exist yet lets you create it.\nReference ticket IDs explicitly (e.g. #1, #2). Tickets not referenced in the specification are considered out of scope or deprecated.")
 	v.titleEntry.OnChanged = func(string) { v.updateModified() }
 	v.bodyEntry.OnChanged = func(string) { v.updateModified() }
 
-	v.editFields = container.NewBorder(v.titleEntry, nil, nil, nil, v.bodyEntry)
+	v.linkBtn = widget.NewButtonWithIcon("Insert link", theme.MailAttachmentIcon(), v.showInsertLink)
+	v.linkBtn.Importance = widget.LowImportance
+	v.editFields = container.NewBorder(
+		container.NewBorder(nil, nil, nil, v.linkBtn, v.titleEntry),
+		nil, nil, nil, v.bodyEntry,
+	)
 	v.contentStack = container.NewStack(v.richScroll, v.editFields)
 
 	v.status = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+	v.backBtn = widget.NewButtonWithIcon("", theme.NavigateBackIcon(), v.Back)
+	v.backBtn.Importance = widget.LowImportance
 	v.previewBtn = widget.NewButtonWithIcon("Preview", theme.VisibilityIcon(), func() { v.setEditMode(false) })
 	v.editBtn = widget.NewButtonWithIcon("Edit", theme.DocumentCreateIcon(), func() { v.setEditMode(true) })
 	v.saveBtn = widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() { v.Save() })
 	v.saveBtn.Importance = widget.HighImportance
 
-	addBtn := widget.NewButtonWithIcon("Add section", theme.ContentAddIcon(), v.showAddSection)
+	addBtn := widget.NewButtonWithIcon("New page", theme.ContentAddIcon(), func() { v.showNewPage("", "") })
 	addBtn.Importance = widget.LowImportance
 	v.upBtn = widget.NewButtonWithIcon("", theme.MoveUpIcon(), func() { v.moveSelected(-1) })
 	v.downBtn = widget.NewButtonWithIcon("", theme.MoveDownIcon(), func() { v.moveSelected(1) })
@@ -105,12 +126,12 @@ func NewSpecView(st *store.Store, win fyne.Window) *SpecView {
 	}
 
 	sidebar := container.NewBorder(
-		container.NewVBox(widget.NewLabelWithStyle("Sections", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), widget.NewSeparator()),
+		container.NewVBox(widget.NewLabelWithStyle("Pages", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), widget.NewSeparator()),
 		container.NewVBox(widget.NewSeparator(), container.NewHBox(addBtn, layout.NewSpacer(), v.upBtn, v.downBtn, v.deleteBtn)),
 		nil, nil,
-		v.sectionList,
+		v.pageList,
 	)
-	header := container.NewBorder(nil, nil, nil,
+	header := container.NewBorder(nil, nil, v.backBtn,
 		container.NewHBox(v.status, v.previewBtn, v.editBtn, v.saveBtn),
 		v.titleLabel,
 	)
@@ -125,7 +146,7 @@ func NewSpecView(st *store.Store, win fyne.Window) *SpecView {
 	return v
 }
 
-// Refresh reloads the index for the active project and the selected section
+// Refresh reloads the page index for the active project and the open page
 // when it changed in the store (e.g. via MCP, CLI or API), keeping unsaved
 // local edits untouched.
 func (v *SpecView) Refresh() {
@@ -136,25 +157,26 @@ func (v *SpecView) Refresh() {
 		}
 		v.slug = slug
 		v.selectedID = ""
+		v.history = nil
 		v.loaded = model.SpecSection{}
 		v.modified = false
 		v.status.SetText("")
 	}
 
-	v.index = nil
-	if slug != "" {
-		v.index, _ = v.store.ListSpecSections(slug)
-	}
-	v.sectionList.Refresh()
+	v.reloadIndex()
 
 	if len(v.index) == 0 {
+		// No pages yet: the main page is created on first save.
 		v.selectedID = ""
 		v.loaded = model.SpecSection{}
-		v.titleLabel.SetText("")
-		v.setEntries("", "")
 		if slug == "" {
+			v.titleLabel.SetText("")
 			v.richText.ParseMarkdown(specNoProjectMarkdown)
 		} else {
+			v.selectedID = model.SpecMainID
+			v.loaded = model.SpecSection{ID: model.SpecMainID, Title: model.SpecMainTitle}
+			v.titleLabel.SetText(model.SpecMainTitle)
+			v.setEntries(model.SpecMainTitle, "")
 			v.richText.ParseMarkdown(specEmptyMarkdown)
 		}
 		v.updateButtons()
@@ -163,25 +185,37 @@ func (v *SpecView) Refresh() {
 
 	target := v.selectedID
 	if v.indexOf(target) < 0 {
-		target = v.index[0].ID
+		target = model.SpecMainID
 		v.modified = false
 	}
-	if target != v.selectedID {
-		v.selectSection(target)
+	if target != v.selectedID || v.loaded.ID != target {
+		v.selectedID = ""
+		v.Open(target)
 		return
 	}
 
-	// Same section: reload only if the stored version is newer.
+	// Same page: reload only if the stored version is newer.
 	if info := v.index[v.indexOf(target)]; !info.UpdatedAt.Equal(v.loaded.UpdatedAt) {
 		if v.modified {
 			v.status.SetText("Changed elsewhere")
 		} else {
-			v.loadSection(target)
+			v.loadPage(target)
 			v.status.SetText("Updated")
 		}
+	} else if !v.editMode {
+		v.renderPreview() // links or backlinks may have changed
 	}
-	v.sectionList.Select(v.indexOf(target))
+	v.selectListRow(target)
 	v.updateButtons()
+}
+
+func (v *SpecView) reloadIndex() {
+	v.index = nil
+	if v.slug != "" {
+		v.index, _ = v.store.ListSpecSections(v.slug)
+	}
+	v.unlinked = model.SpecUnreachable(v.index)
+	v.pageList.Refresh()
 }
 
 func (v *SpecView) indexOf(id string) int {
@@ -193,26 +227,62 @@ func (v *SpecView) indexOf(id string) int {
 	return -1
 }
 
-// selectSection saves pending edits and loads another section.
-func (v *SpecView) selectSection(id string) {
+func (v *SpecView) selectListRow(id string) {
+	v.navigating = true
+	if i := v.indexOf(id); i >= 0 {
+		v.pageList.Select(i)
+	} else {
+		v.pageList.UnselectAll()
+	}
+	v.navigating = false
+}
+
+// Open saves pending edits and navigates to a page, remembering the current
+// one for Back.
+func (v *SpecView) Open(id string) {
+	if id == v.selectedID {
+		return
+	}
 	if v.modified {
 		v.Save()
 	}
-	v.selectedID = id
-	v.loadSection(id)
-	v.status.SetText("")
-	if i := v.indexOf(id); i >= 0 {
-		v.sectionList.Select(i)
+	if v.selectedID != "" {
+		v.history = append(v.history, v.selectedID)
+	}
+	v.show(id)
+}
+
+// Back returns to the previously open page.
+func (v *SpecView) Back() {
+	for len(v.history) > 0 {
+		id := v.history[len(v.history)-1]
+		v.history = v.history[:len(v.history)-1]
+		if v.indexOf(id) >= 0 {
+			if v.modified {
+				v.Save()
+			}
+			v.show(id)
+			return
+		}
 	}
 	v.updateButtons()
 }
 
-func (v *SpecView) loadSection(id string) {
-	sections, err := v.store.GetSpecSections(v.slug, []string{id})
-	if err != nil || len(sections) == 0 {
+func (v *SpecView) show(id string) {
+	v.selectedID = id
+	v.loadPage(id)
+	v.status.SetText("")
+	v.setEditMode(false)
+	v.selectListRow(id)
+	v.updateButtons()
+}
+
+func (v *SpecView) loadPage(id string) {
+	pages, err := v.store.GetSpecSections(v.slug, []string{id})
+	if err != nil || len(pages) == 0 {
 		return
 	}
-	v.loaded = sections[0]
+	v.loaded = pages[0]
 	v.modified = false
 	v.titleLabel.SetText(v.loaded.Title)
 	v.setEntries(v.loaded.Title, v.loaded.Body)
@@ -239,16 +309,54 @@ func (v *SpecView) updateModified() {
 	}
 }
 
+// renderPreview renders the open page with its "Linked from" footer and makes
+// spec: links navigate inside the wiki.
 func (v *SpecView) renderPreview() {
-	body := v.bodyEntry.Text
 	if v.selectedID == "" {
 		return
 	}
-	if strings.TrimSpace(body) == "" {
-		body = "*This section is empty. Click 'Edit' to write it.*"
+	body := strings.TrimSpace(v.bodyEntry.Text)
+	if body == "" {
+		if len(v.index) == 0 {
+			body = specEmptyMarkdown
+		} else {
+			body = specEmptyPageMarkdown
+		}
+	}
+	if back := model.SpecBacklinks(v.index, v.selectedID); len(back) > 0 {
+		links := make([]string, 0, len(back))
+		for _, info := range back {
+			links = append(links, model.SpecLink(info.Title, info.ID))
+		}
+		body += "\n\n---\n\n*Linked from:* " + strings.Join(links, ", ")
 	}
 	v.richText.ParseMarkdown(body)
+	v.hookLinks(v.richText.Segments)
+	v.richText.Refresh()
 	v.richScroll.ScrollToTop()
+}
+
+// hookLinks makes spec: links open pages, or offer to create missing ones.
+func (v *SpecView) hookLinks(segs []widget.RichTextSegment) {
+	for _, seg := range segs {
+		switch s := seg.(type) {
+		case *widget.HyperlinkSegment:
+			if s.URL == nil || s.URL.Scheme != model.SpecLinkScheme {
+				continue
+			}
+			id, text := s.URL.Opaque, s.Text
+			if v.indexOf(id) < 0 {
+				s.Text += specMissingSuffix
+				s.OnTapped = func() { v.showNewPage(id, text) }
+			} else {
+				s.OnTapped = func() { v.Open(id) }
+			}
+		case *widget.ParagraphSegment:
+			v.hookLinks(s.Texts)
+		case *widget.ListSegment:
+			v.hookLinks(s.Items)
+		}
+	}
 }
 
 func (v *SpecView) setEditMode(editing bool) {
@@ -272,6 +380,7 @@ func (v *SpecView) setEditMode(editing bool) {
 
 func (v *SpecView) updateButtons() {
 	i := v.indexOf(v.selectedID)
+	isPage := i > 0 // an existing page other than main
 	setEnabled := func(b *widget.Button, on bool) {
 		if on {
 			b.Enable()
@@ -279,14 +388,15 @@ func (v *SpecView) updateButtons() {
 			b.Disable()
 		}
 	}
-	setEnabled(v.editBtn, i >= 0)
-	setEnabled(v.saveBtn, i >= 0)
-	setEnabled(v.deleteBtn, i >= 0)
-	setEnabled(v.upBtn, i > 0)
-	setEnabled(v.downBtn, i >= 0 && i < len(v.index)-1)
+	setEnabled(v.backBtn, len(v.history) > 0)
+	setEnabled(v.editBtn, v.selectedID != "")
+	setEnabled(v.saveBtn, v.selectedID != "")
+	setEnabled(v.deleteBtn, isPage)
+	setEnabled(v.upBtn, i > 1)
+	setEnabled(v.downBtn, isPage && i < len(v.index)-1)
 }
 
-// Save stores the selected section if it has local changes.
+// Save stores the open page if it has local changes.
 func (v *SpecView) Save() {
 	if v.selectedID == "" || v.slug == "" {
 		return
@@ -305,45 +415,92 @@ func (v *SpecView) Save() {
 	v.modified = false
 	v.titleLabel.SetText(saved.Title)
 	v.status.SetText("Saved")
+	v.reloadIndex()
 	v.setEditMode(false)
+	v.selectListRow(v.selectedID)
+	v.updateButtons()
 }
 
-func (v *SpecView) showAddSection() {
+// showNewPage asks for a title and creates a page. With an id (a link to a
+// missing page) the page gets that id so the link resolves.
+func (v *SpecView) showNewPage(id, title string) {
 	if v.slug == "" {
 		return
 	}
-	title := widget.NewEntry()
-	title.SetPlaceHolder("e.g. Architecture")
-	d := dialog.NewForm("Add section", "Add", "Cancel",
-		[]*widget.FormItem{widget.NewFormItem("Title", title)},
+	titleEntry := widget.NewEntry()
+	titleEntry.SetText(title)
+	titleEntry.SetPlaceHolder("e.g. Architecture")
+	heading := "New page"
+	if id != "" {
+		heading = "Create page '" + id + "'"
+	}
+	d := dialog.NewForm(heading, "Create", "Cancel",
+		[]*widget.FormItem{widget.NewFormItem("Title", titleEntry)},
 		func(ok bool) {
-			if !ok || strings.TrimSpace(title.Text) == "" {
+			if !ok || strings.TrimSpace(titleEntry.Text) == "" {
 				return
 			}
-			if v.modified {
-				v.Save()
-			}
-			position := -1
-			if i := v.indexOf(v.selectedID); i >= 0 {
-				position = i + 1
-			}
-			sec, err := v.store.AddSpecSection(v.slug, title.Text, "", position)
-			if err != nil {
-				dialog.ShowError(err, v.window)
-				return
-			}
-			v.index, _ = v.store.ListSpecSections(v.slug)
-			v.sectionList.Refresh()
-			v.selectSection(sec.ID)
-			v.setEditMode(true)
+			v.createPage(id, titleEntry.Text)
 		}, v.window)
 	d.Resize(fyne.NewSize(420, 160))
 	d.Show()
 }
 
+func (v *SpecView) createPage(id, title string) {
+	if v.modified {
+		v.Save()
+	}
+	page, err := v.store.AddSpecSection(v.slug, id, title, "", -1)
+	if err != nil {
+		dialog.ShowError(err, v.window)
+		return
+	}
+	v.reloadIndex()
+	v.Open(page.ID)
+	v.setEditMode(true)
+}
+
+// showInsertLink inserts a link to an existing page at the cursor.
+func (v *SpecView) showInsertLink() {
+	var titles []string
+	var ids []string
+	for _, info := range v.index {
+		if info.ID != v.selectedID {
+			titles = append(titles, info.Title)
+			ids = append(ids, info.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	sel := widget.NewSelect(titles, nil)
+	sel.SetSelectedIndex(0)
+	dialog.ShowForm("Insert link", "Insert", "Cancel",
+		[]*widget.FormItem{widget.NewFormItem("Page", sel)},
+		func(ok bool) {
+			if ok && sel.SelectedIndex() >= 0 {
+				i := sel.SelectedIndex()
+				insertAtCursor(v.bodyEntry, model.SpecLink(titles[i], ids[i]))
+			}
+		}, v.window)
+}
+
+// insertAtCursor inserts text at the entry's cursor and moves the cursor
+// after it.
+func insertAtCursor(e *widget.Entry, text string) {
+	lines := strings.Split(e.Text, "\n")
+	row := min(e.CursorRow, len(lines)-1)
+	line := []rune(lines[row])
+	col := min(e.CursorColumn, len(line))
+	lines[row] = string(line[:col]) + text + string(line[col:])
+	e.SetText(strings.Join(lines, "\n"))
+	e.CursorRow, e.CursorColumn = row, col+len([]rune(text))
+	e.Refresh()
+}
+
 func (v *SpecView) moveSelected(delta int) {
 	i := v.indexOf(v.selectedID)
-	if i < 0 {
+	if i < 1 {
 		return
 	}
 	if v.modified {
@@ -353,29 +510,29 @@ func (v *SpecView) moveSelected(delta int) {
 		v.status.SetText("Could not move")
 		return
 	}
-	v.index, _ = v.store.ListSpecSections(v.slug)
-	v.sectionList.Refresh()
-	v.sectionList.Select(v.indexOf(v.selectedID))
+	v.reloadIndex()
+	v.selectListRow(v.selectedID)
 	v.updateButtons()
 }
 
 func (v *SpecView) confirmDelete() {
-	if v.selectedID == "" {
+	if v.indexOf(v.selectedID) < 1 {
 		return
 	}
 	id, title := v.selectedID, v.loaded.Title
-	dialog.ShowConfirm("Delete section",
-		fmt.Sprintf("Delete the section %q? This cannot be undone.", title),
-		func(ok bool) {
-			if !ok {
-				return
-			}
-			if err := v.store.DeleteSpecSection(v.slug, id); err != nil {
-				dialog.ShowError(err, v.window)
-				return
-			}
-			v.modified = false
-			v.selectedID = ""
-			v.Refresh()
-		}, v.window)
+	msg := fmt.Sprintf("Delete the page %q? This cannot be undone.", title)
+	if n := len(model.SpecBacklinks(v.index, id)); n > 0 {
+		msg += fmt.Sprintf("\n%d page(s) link to it; those links will show as missing pages.", n)
+	}
+	dialog.ShowConfirm("Delete page", msg, func(ok bool) {
+		if !ok {
+			return
+		}
+		if err := v.store.DeleteSpecSection(v.slug, id); err != nil {
+			dialog.ShowError(err, v.window)
+			return
+		}
+		v.modified = false
+		v.Refresh()
+	}, v.window)
 }

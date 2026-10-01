@@ -10,6 +10,7 @@ import (
 // SpecSectionRequest is the body accepted when creating, updating or moving a
 // spec section. Nil fields are left unchanged on update.
 type SpecSectionRequest struct {
+	ID       string  `json:"id,omitempty"`
 	Title    *string `json:"title,omitempty"`
 	Body     *string `json:"body,omitempty"`
 	Position *int    `json:"position,omitempty"`
@@ -70,7 +71,7 @@ func (h *APIHandler) addSpecSection(w http.ResponseWriter, r *http.Request) {
 	if body.Position != nil {
 		position = *body.Position
 	}
-	sec, err := h.store.AddSpecSection(chi.URLParam(r, "slug"), title, text, position)
+	sec, err := h.store.AddSpecSection(chi.URLParam(r, "slug"), body.ID, title, text, position)
 	if err != nil {
 		errorResponse(w, http.StatusBadRequest, err.Error())
 		return

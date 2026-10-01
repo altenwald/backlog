@@ -420,9 +420,9 @@ func TestMCPDeprecateAndSpecTools(t *testing.T) {
 		return string(out)
 	}
 
-	// 3. get_project_spec without sections returns only the index
-	if out := call(12, "get_project_spec", `{"project":"specproj"}`); !strings.Contains(out, `\"index\"`) || strings.Contains(out, "Composite Spec") {
-		t.Fatalf("expected only the section index, got %s", out)
+	// 3. get_project_spec without sections returns the main page and the page list
+	if out := call(12, "get_project_spec", `{"project":"specproj"}`); !strings.Contains(out, `\"pages\"`) || !strings.Contains(out, "Composite Spec") {
+		t.Fatalf("expected main page and page list, got %s", out)
 	}
 	if out := call(13, "get_project_spec", `{"project":"specproj","full":true}`); !strings.Contains(out, "Composite Spec") {
 		t.Fatalf("expected full spec, got %s", out)
@@ -435,8 +435,14 @@ func TestMCPDeprecateAndSpecTools(t *testing.T) {
 	if out := call(15, "update_spec_section", `{"project":"specproj","section":"scope","body":"Only #1 and #2"}`); !strings.Contains(out, "updated") {
 		t.Fatalf("expected section updated, got %s", out)
 	}
-	if out := call(16, "move_spec_section", `{"project":"specproj","section":"scope","position":0}`); !strings.Contains(out, "moved") {
+	if out := call(16, "move_spec_section", `{"project":"specproj","section":"scope","position":1}`); !strings.Contains(out, "moved") {
 		t.Fatalf("expected section moved, got %s", out)
+	}
+	if out := call(20, "get_project_spec", `{"project":"specproj"}`); !strings.Contains(out, `\"unlinked\": [\n    \"scope\"`) {
+		t.Fatalf("expected scope to be reported as unlinked, got %s", out)
+	}
+	if out := call(21, "add_spec_section", `{"project":"specproj","section":"from-link","title":"From link"}`); !strings.Contains(out, "'from-link' added") {
+		t.Fatalf("expected page created with given id, got %s", out)
 	}
 	if out := call(17, "get_project_spec", `{"project":"specproj","sections":["scope"]}`); !strings.Contains(out, "Only #1 and #2") || strings.Contains(out, "Composite Spec") {
 		t.Fatalf("expected only the scope section, got %s", out)

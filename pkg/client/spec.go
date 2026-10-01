@@ -11,6 +11,7 @@ import (
 )
 
 type specSectionPayload struct {
+	ID       string  `json:"id,omitempty"`
 	Title    *string `json:"title,omitempty"`
 	Body     *string `json:"body,omitempty"`
 	Position *int    `json:"position,omitempty"`
@@ -92,11 +93,12 @@ func (c *Client) GetSpecSections(projectSlug string, ids []string) ([]model.Spec
 	return sections, err
 }
 
-// AddSpecSection creates a section at position (negative appends it).
-func (c *Client) AddSpecSection(projectSlug, title, body string, position int) (*model.SpecSection, error) {
+// AddSpecSection creates a page at position (negative appends it). An empty
+// id is derived from the title.
+func (c *Client) AddSpecSection(projectSlug, id, title, body string, position int) (*model.SpecSection, error) {
 	var sec model.SpecSection
 	err := c.doSpec(http.MethodPost, c.sectionsURL(projectSlug),
-		specSectionPayload{Title: &title, Body: &body, Position: &position}, &sec)
+		specSectionPayload{ID: id, Title: &title, Body: &body, Position: &position}, &sec)
 	return &sec, err
 }
 

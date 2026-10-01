@@ -31,7 +31,7 @@ type Backend interface {
 	UpdateProjectSpecification(slug string, spec string) error
 	ListSpecSections(slug string) ([]model.SpecSectionInfo, error)
 	GetSpecSections(slug string, ids []string) ([]model.SpecSection, error)
-	AddSpecSection(slug, title, body string, position int) (*model.SpecSection, error)
+	AddSpecSection(slug, id, title, body string, position int) (*model.SpecSection, error)
 	UpdateSpecSection(slug, id string, title, body *string) (*model.SpecSection, error)
 	DeleteSpecSection(slug, id string) error
 	MoveSpecSection(slug, id string, position int) error
@@ -132,8 +132,8 @@ func (b *storeBackend) GetSpecSections(slug string, ids []string) ([]model.SpecS
 	return b.st.GetSpecSections(slug, ids)
 }
 
-func (b *storeBackend) AddSpecSection(slug, title, body string, position int) (*model.SpecSection, error) {
-	return b.st.AddSpecSection(slug, title, body, position)
+func (b *storeBackend) AddSpecSection(slug, id, title, body string, position int) (*model.SpecSection, error) {
+	return b.st.AddSpecSection(slug, id, title, body, position)
 }
 
 func (b *storeBackend) UpdateSpecSection(slug, id string, title, body *string) (*model.SpecSection, error) {
@@ -251,8 +251,8 @@ func (b *clientBackend) GetSpecSections(slug string, ids []string) ([]model.Spec
 	return b.c.GetSpecSections(slug, ids)
 }
 
-func (b *clientBackend) AddSpecSection(slug, title, body string, position int) (*model.SpecSection, error) {
-	return b.c.AddSpecSection(slug, title, body, position)
+func (b *clientBackend) AddSpecSection(slug, id, title, body string, position int) (*model.SpecSection, error) {
+	return b.c.AddSpecSection(slug, id, title, body, position)
 }
 
 func (b *clientBackend) UpdateSpecSection(slug, id string, title, body *string) (*model.SpecSection, error) {
