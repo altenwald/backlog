@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 )
 
@@ -73,6 +74,8 @@ func (t *BacklogTheme) Size(name fyne.ThemeSizeName) float32 {
 		return 24
 	case theme.SizeNameSubHeadingText:
 		return 18
+	case sizeNameTaskTitle:
+		return 20
 	}
 	return t.Theme.Size(name)
 }
@@ -82,20 +85,33 @@ func DependencyIcon() fyne.Resource {
 	return theme.NewThemedResource(fyne.NewStaticResource("dependency.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#000" d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7a5 5 0 0 0 0 10h4v-1.9H7A3.1 3.1 0 0 1 3.9 12ZM8 13h8v-2H8v2Zm9-6h-4v1.9h4a3.1 3.1 0 0 1 0 6.2h-4V17h4a5 5 0 0 0 0-10Z"/></svg>`)))
 }
 
-// typographyTheme changes density without replacing the active color palette.
-type typographyTheme struct {
-	fyne.Theme
-	textSize, inset float32
+// sizeNameTaskTitle is the text size of the task title in the detail pane.
+const sizeNameTaskTitle fyne.ThemeSizeName = "backlogTaskTitle"
+
+// insetLayout lays out one object as if the theme's inner padding were inset.
+// It replaces per-widget ThemeOverrides: Fyne gives every override a new
+// font cache scope that is never released, so overrides on recreated
+// widgets (list rows, detail panes) leak several MB of parsed fonts each.
+type insetLayout struct{ inset float32 }
+
+func (l insetLayout) delta() float32 {
+	return theme.Size(theme.SizeNameInnerPadding) - l.inset
 }
 
-func (t typographyTheme) Size(n fyne.ThemeSizeName) float32 {
-	if n == theme.SizeNameText && t.textSize > 0 {
-		return t.textSize
-	}
-	if n == theme.SizeNameInnerPadding {
-		return t.inset
-	}
-	return t.Theme.Size(n)
+func (l insetLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	s := objects[0].MinSize()
+	d := 2 * l.delta()
+	return fyne.NewSize(max(0, s.Width-d), max(0, s.Height-d))
+}
+
+func (l insetLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	d := l.delta()
+	objects[0].Move(fyne.NewPos(-d, -d))
+	objects[0].Resize(fyne.NewSize(size.Width+2*d, size.Height+2*d))
+}
+
+func withInset(o fyne.CanvasObject, inset float32) *fyne.Container {
+	return container.New(insetLayout{inset}, o)
 }
 
 func branchIcon() fyne.Resource {

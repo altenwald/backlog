@@ -385,8 +385,8 @@ func TestDeleteActiveProjectAndSwitchToEmptySpecProject(t *testing.T) {
 func TestRealUserDataProjects(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	realConfigDir := filepath.Join(home, ".config", "backlog")
-	if _, err := os.Stat(realConfigDir); os.IsNotExist(err) {
-		t.Skip("skipping test: ~/.config/backlog not found")
+	if _, err := os.Stat(filepath.Join(realConfigDir, "config.json")); os.IsNotExist(err) {
+		t.Skip("skipping test: no JSON data in ~/.config/backlog (not found or already migrated to SQLite)")
 	}
 
 	tmpDir, err := os.MkdirTemp("", "backlog-user-data-test-*")

@@ -56,6 +56,7 @@ func NewTaskDetailView(callbacks TaskDetailCallbacks) *TaskDetailView {
 	// Title
 	dv.titleLabel = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	dv.titleLabel.Wrapping = fyne.TextWrapWord
+	dv.titleLabel.SizeName = sizeNameTaskTitle
 
 	// Action buttons
 	dv.toggleDoneBtn = widget.NewButtonWithIcon("Complete", theme.ConfirmIcon(), func() {
@@ -110,7 +111,7 @@ func NewTaskDetailView(callbacks TaskDetailCallbacks) *TaskDetailView {
 	)
 
 	topArea := container.NewVBox(
-		container.NewThemeOverride(dv.titleLabel, typographyTheme{Theme: fyne.CurrentApp().Settings().Theme(), textSize: 20, inset: 9}),
+		withInset(dv.titleLabel, 9),
 		dv.badgesRow,
 		dv.timeLabel,
 		btnBar,

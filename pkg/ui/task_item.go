@@ -12,6 +12,8 @@ import (
 	"github.com/altenwald/backlog/pkg/model"
 )
 
+const rowInset = 4
+
 type TaskRowItem struct {
 	widget.BaseWidget
 	container     *fyne.Container
@@ -41,8 +43,9 @@ func NewTaskRowItem(onToggleDone func(taskID string, done bool)) *TaskRowItem {
 	item.metadata.Importance = widget.LowImportance
 	item.dependency = widget.NewIcon(DependencyIcon())
 	item.tier = container.NewStack(MakeBadge("T3", TierColor(model.Tier3), theme.Color(theme.ColorNameForeground)))
-	secondary := container.NewBorder(nil, nil, item.dependency, nil, item.metadata)
-	text := container.NewVBox(item.title, secondary)
+	// Rows use a tighter text inset than the rest of the UI.
+	secondary := container.NewBorder(nil, nil, item.dependency, nil, withInset(item.metadata, rowInset))
+	text := container.NewVBox(withInset(item.title, rowInset), secondary)
 	item.indent = canvas.NewRectangle(color.Transparent)
 	item.branch = widget.NewIcon(branchIcon())
 	item.indent.Hide()
@@ -53,7 +56,7 @@ func NewTaskRowItem(onToggleDone func(taskID string, done bool)) *TaskRowItem {
 }
 
 func (item *TaskRowItem) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(container.NewThemeOverride(item.container, typographyTheme{Theme: fyne.CurrentApp().Settings().Theme(), inset: 4}))
+	return widget.NewSimpleRenderer(item.container)
 }
 
 func (item *TaskRowItem) Bind(task model.Task) {
