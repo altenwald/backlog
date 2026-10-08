@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/altenwald/backlog/pkg/model"
 	"github.com/altenwald/backlog/pkg/store"
@@ -95,7 +96,7 @@ func BuildInstructions(userInstructions string) string {
 // It returns the full instructions with the default user section.
 var BacklogInstructions = BuildInstructions("")
 
-func NewMCPServer(st *store.Store) *server.MCPServer {
+func NewMCPServer(st store.Backend) *server.MCPServer {
 	return NewMCPServerWithBackend(NewStoreBackend(st))
 }
 
@@ -445,6 +446,9 @@ func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPSe
 			}
 
 			sum, _ := be.GetSummary(project)
+			if sum == nil {
+				return mcp.NewToolResultText(fmt.Sprintf("Task created in %s: #%s %s. Summary unavailable; reload the project.", project, task.ID, task.Title)), nil
+			}
 			return mcp.NewToolResultText(fmt.Sprintf("✔ Task created in '%s': #%s [%s] [%s] %s\nProject status: %d/%d open",
 				project, task.ID, task.Size, task.Tier.ShortLabel(), task.Title, sum.OpenTasks, sum.TotalTasks)), nil
 		},
@@ -540,6 +544,9 @@ func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPSe
 			}
 
 			sum, _ := be.GetSummary(project)
+			if sum == nil {
+				return mcp.NewToolResultText(fmt.Sprintf("Task #%s updated in %s. Summary unavailable; reload the project.", task.ID, project)), nil
+			}
 			statusStr := "completed"
 			if !done {
 				statusStr = "marked as pending"
@@ -558,6 +565,7 @@ func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPSe
 		mcp.NewTool(
 			"update_task",
 			mcp.WithDescription("Update fields of an existing task."),
+			mcp.WithString("expected_updated_at", mcp.Description("updated_at from the task you read; stale edits are rejected. Use RFC3339 format.")),
 			mcp.WithString("project", mcp.Description("Project slug (required)"), mcp.Required()),
 			mcp.WithString("task_id", mcp.Description("ID of task to update"), mcp.Required()),
 			mcp.WithString("title", mcp.Description("New title")),
@@ -589,6 +597,13 @@ func newMCPServerWithInstructions(be Backend, instructions string) *server.MCPSe
 			}
 
 			update := model.TaskUpdate{ID: taskID}
+			if value := req.GetString("expected_updated_at", ""); value != "" {
+				parsed, e := time.Parse(time.RFC3339Nano, value)
+				if e != nil {
+					return mcp.NewToolResultError("invalid expected_updated_at"), nil
+				}
+				update.ExpectedUpdatedAt = &parsed
+			}
 			if t := req.GetString("title", ""); t != "" {
 				update.Title = t
 			}

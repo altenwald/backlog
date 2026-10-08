@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,6 +27,7 @@ const (
 )
 
 type Event struct {
+	Source      string         `json:"source,omitempty"`
 	Type        EventType      `json:"type"`
 	ProjectSlug string         `json:"project_slug"`
 	TaskID      string         `json:"task_id,omitempty"`
@@ -41,74 +40,24 @@ const (
 	settingMCPUserInstructions = "mcp_user_instructions"
 )
 
-// Store persists projects, tasks and settings in a SQLite database
-// (backlog.db inside the data directory). Writes are serialized by mu so
+// projectDB implements operations on a single project database. Writes are serialized by mu so
 // that validation and the write it guards run as one unit; every write is
 // also a single SQLite transaction.
-type Store struct {
-	mu          sync.RWMutex
-	dataDir     string
-	db          *sql.DB
-	subscribers []chan Event
-}
-
-func NewStore(dataDir string) (*Store, error) {
-	if dataDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
-		dataDir = filepath.Join(home, ".config", "backlog")
-	}
-
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return nil, fmt.Errorf("cannot create data dir: %w", err)
-	}
-
-	dbPath := filepath.Join(dataDir, dbFileName)
-	if _, err := os.Stat(dbPath); errors.Is(err, os.ErrNotExist) && hasLegacyData(dataDir) {
-		if err := importLegacy(dataDir); err != nil {
-			return nil, fmt.Errorf("cannot import JSON data into %s: %w (JSON files were left untouched)", dbPath, err)
-		}
-	}
-
-	db, err := openDB(dbPath)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Store{
-		dataDir: dataDir,
-		db:      db,
-	}, nil
+type projectDB struct {
+	mu       sync.RWMutex
+	db       *sql.DB
+	onEvent  func(Event)
+	expected *Precondition
 }
 
 // Close releases the database handle.
-func (s *Store) Close() error {
+func (s *projectDB) Close() error {
 	return s.db.Close()
 }
 
-func (s *Store) GetDataDir() string {
-	return s.dataDir
-}
-
-func (s *Store) Subscribe() <-chan Event {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ch := make(chan Event, 20)
-	s.subscribers = append(s.subscribers, ch)
-	return ch
-}
-
-func (s *Store) notify(ev Event) {
-	s.mu.RLock()
-	subs := append([]chan Event(nil), s.subscribers...)
-	s.mu.RUnlock()
-	for _, ch := range subs {
-		select {
-		case ch <- ev:
-		default:
-		}
+func (s *projectDB) notify(ev Event) {
+	if s.onEvent != nil {
+		s.onEvent(ev)
 	}
 }
 
@@ -148,7 +97,7 @@ func activeProject(q querier) string {
 	return first
 }
 
-func (s *Store) resolveSlug(q querier, slug string) string {
+func (s *projectDB) resolveSlug(q querier, slug string) string {
 	if slug == "" {
 		return activeProject(q)
 	}
@@ -165,25 +114,47 @@ func projectExists(q querier, slug string) error {
 }
 
 // withTx runs fn inside a write transaction while holding the write lock.
-func (s *Store) withTx(fn func(tx *sql.Tx) error) error {
+func (s *projectDB) withTx(fn func(tx *sql.Tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
+	if s.expected != nil {
+		if s.expected.RequestID != "" {
+			var one int
+			if e := tx.QueryRow(`SELECT 1 FROM remote_receipts WHERE request_id=?`, s.expected.RequestID).Scan(&one); e == nil {
+				tx.Rollback()
+				return ErrAlreadyApplied
+			} else if !errors.Is(e, sql.ErrNoRows) {
+				tx.Rollback()
+				return e
+			}
+		}
+		if err := checkPrecondition(tx, *s.expected); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
 	if err := fn(tx); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
+	if s.expected != nil && s.expected.RequestID != "" {
+		if _, e := tx.Exec(`INSERT INTO remote_receipts(request_id,applied_at) VALUES(?,?)`, s.expected.RequestID, formatTime(time.Now())); e != nil {
+			tx.Rollback()
+			return e
+		}
+	}
 	return tx.Commit()
 }
 
-func (s *Store) GetActiveProjectSlug() string {
+func (s *projectDB) GetActiveProjectSlug() string {
 	return activeProject(s.db)
 }
 
-func (s *Store) SetActiveProject(slug string) error {
+func (s *projectDB) SetActiveProject(slug string) error {
 	slug = strings.ToLower(slug)
 	changed := false
 	err := s.withTx(func(tx *sql.Tx) error {
@@ -211,12 +182,12 @@ func (s *Store) SetActiveProject(slug string) error {
 	return nil
 }
 
-const projectColumns = `slug, name, description, inserted_at, updated_at`
+const projectColumns = `slug, name, description, inserted_at, updated_at, open`
 
 func scanProject(row interface{ Scan(...any) error }) (*model.Project, error) {
 	var p model.Project
 	var inserted, updated string
-	if err := row.Scan(&p.Slug, &p.Name, &p.Description, &inserted, &updated); err != nil {
+	if err := row.Scan(&p.Slug, &p.Name, &p.Description, &inserted, &updated, &p.Open); err != nil {
 		return nil, err
 	}
 	p.InsertedAt = parseTime(inserted)
@@ -227,7 +198,7 @@ func scanProject(row interface{ Scan(...any) error }) (*model.Project, error) {
 
 // ListProjects returns project metadata sorted by name. Tasks and the
 // specification are not loaded; use GetProject for a single full project.
-func (s *Store) ListProjects() []*model.Project {
+func (s *projectDB) ListProjects() []*model.Project {
 	rows, err := s.db.Query(`SELECT ` + projectColumns + ` FROM projects ORDER BY name, slug`)
 	if err != nil {
 		return nil
@@ -247,7 +218,7 @@ func (s *Store) ListProjects() []*model.Project {
 
 // GetProject returns a project with all its tasks. The specification is not
 // loaded; read it with GetProjectSpecification or GetSpecSections.
-func (s *Store) GetProject(slug string) (*model.Project, error) {
+func (s *projectDB) GetProject(slug string) (*model.Project, error) {
 	slug = s.resolveSlug(s.db, slug)
 
 	p, err := scanProject(s.db.QueryRow(`SELECT `+projectColumns+` FROM projects WHERE slug = ?`, slug))
@@ -266,7 +237,7 @@ func (s *Store) GetProject(slug string) (*model.Project, error) {
 	return p, nil
 }
 
-func (s *Store) CreateProject(slug, name, description string) (*model.Project, error) {
+func (s *projectDB) CreateProject(slug, name, description string) (*model.Project, error) {
 	slug = strings.ToLower(strings.TrimSpace(slug))
 	if slug == "" {
 		return nil, errors.New("project slug cannot be empty")
@@ -313,13 +284,13 @@ func (s *Store) CreateProject(slug, name, description string) (*model.Project, e
 }
 
 func insertProject(q querier, p *model.Project, nextTaskID int) error {
-	_, err := q.Exec(`INSERT INTO projects(slug, name, description, next_task_id, inserted_at, updated_at)
-		VALUES(?, ?, ?, ?, ?, ?)`,
-		p.Slug, p.Name, p.Description, nextTaskID, formatTime(p.InsertedAt), formatTime(p.UpdatedAt))
+	_, err := q.Exec(`INSERT INTO projects(slug, name, description, next_task_id, inserted_at, updated_at, open)
+		VALUES(?, ?, ?, ?, ?, ?, ?)`,
+		p.Slug, p.Name, p.Description, nextTaskID, formatTime(p.InsertedAt), formatTime(p.UpdatedAt), p.Open)
 	return err
 }
 
-func (s *Store) DeleteProject(slug string) error {
+func (s *projectDB) DeleteProject(slug string) error {
 	slug = strings.ToLower(strings.TrimSpace(slug))
 	if slug == "" {
 		return errors.New("project slug cannot be empty")
@@ -508,11 +479,10 @@ func replaceDeps(q querier, slug, id string, deps []string) error {
 }
 
 func touchProject(q querier, slug string, now time.Time) error {
-	_, err := q.Exec(`UPDATE projects SET updated_at = ? WHERE slug = ?`, formatTime(now), slug)
-	return err
+	return touchMonotonic(q, slug, now)
 }
 
-func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.Task, error) {
+func (s *projectDB) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.Task, error) {
 	projectSlug = s.resolveSlug(s.db, projectSlug)
 	if err := projectExists(s.db, projectSlug); err != nil {
 		return nil, err
@@ -592,7 +562,7 @@ func (s *Store) ListTasks(projectSlug string, filter model.TaskFilter) ([]model.
 	return results, nil
 }
 
-func (s *Store) GetTopPriorities(projectSlug string, limit int) ([]model.Task, error) {
+func (s *projectDB) GetTopPriorities(projectSlug string, limit int) ([]model.Task, error) {
 	if limit <= 0 {
 		limit = 5
 	}
@@ -626,7 +596,7 @@ func (s *Store) GetTopPriorities(projectSlug string, limit int) ([]model.Task, e
 	return tasks, nil
 }
 
-func (s *Store) GetSummary(projectSlug string) (*model.Summary, error) {
+func (s *projectDB) GetSummary(projectSlug string) (*model.Summary, error) {
 	projectSlug = s.resolveSlug(s.db, projectSlug)
 
 	var name string
@@ -694,7 +664,7 @@ func cleanDependsOn(q querier, slug, selfID string, deps []string) ([]string, er
 	return clean, nil
 }
 
-func (s *Store) AddTask(projectSlug string, task model.Task) (*model.Task, error) {
+func (s *projectDB) AddTask(projectSlug string, task model.Task) (*model.Task, error) {
 	if task.Title == "" {
 		return nil, errors.New("task title is required")
 	}
@@ -766,7 +736,7 @@ func (s *Store) AddTask(projectSlug string, task model.Task) (*model.Task, error
 
 // mutateTask loads a task, applies fn and writes the task back, all in one
 // transaction. fn may return an error to abort without changes.
-func (s *Store) mutateTask(projectSlug, taskID string, fn func(tx *sql.Tx, slug string, t *model.Task) error) (string, *model.Task, error) {
+func (s *projectDB) mutateTask(projectSlug, taskID string, fn func(tx *sql.Tx, slug string, t *model.Task) error) (string, *model.Task, error) {
 	var result model.Task
 	err := s.withTx(func(tx *sql.Tx) error {
 		projectSlug = s.resolveSlug(tx, projectSlug)
@@ -777,8 +747,12 @@ func (s *Store) mutateTask(projectSlug, taskID string, fn func(tx *sql.Tx, slug 
 		if err != nil {
 			return err
 		}
+		previous := t.UpdatedAt
 		if err := fn(tx, projectSlug, &t); err != nil {
 			return err
+		}
+		if !t.UpdatedAt.After(previous) {
+			t.UpdatedAt = previous.Add(time.Nanosecond)
 		}
 		if err := updateTaskRow(tx, projectSlug, t); err != nil {
 			return err
@@ -795,7 +769,7 @@ func (s *Store) mutateTask(projectSlug, taskID string, fn func(tx *sql.Tx, slug 
 	return projectSlug, &result, nil
 }
 
-func (s *Store) CompleteTask(projectSlug string, taskID string, done bool, resolution ...string) (*model.Task, error) {
+func (s *projectDB) CompleteTask(projectSlug string, taskID string, done bool, resolution ...string) (*model.Task, error) {
 	slug, task, err := s.mutateTask(projectSlug, taskID, func(_ *sql.Tx, _ string, t *model.Task) error {
 		t.Done = done
 		now := time.Now()
@@ -823,8 +797,24 @@ func (s *Store) CompleteTask(projectSlug string, taskID string, done bool, resol
 	return task, nil
 }
 
-func (s *Store) UpdateTask(projectSlug string, upd model.TaskUpdate) (*model.Task, error) {
+func (s *projectDB) UpdateTask(projectSlug string, upd model.TaskUpdate) (*model.Task, error) {
 	slug, task, err := s.mutateTask(projectSlug, upd.ID, func(tx *sql.Tx, slug string, t *model.Task) error {
+		if upd.ExpectedUpdatedAt != nil && !t.UpdatedAt.Equal(*upd.ExpectedUpdatedAt) {
+			return ErrStale
+		}
+		if upd.Done != nil {
+			t.Done = *upd.Done
+			if t.Done {
+				now := time.Now()
+				t.TerminatedAt = &now
+			} else {
+				t.TerminatedAt = nil
+			}
+		}
+		if upd.Deprecated != nil {
+			t.Deprecated = *upd.Deprecated
+		}
+
 		if upd.Title != "" {
 			t.Title = upd.Title
 		}
@@ -923,7 +913,7 @@ func (s *Store) UpdateTask(projectSlug string, upd model.TaskUpdate) (*model.Tas
 	return task, nil
 }
 
-func (s *Store) AssignTask(projectSlug string, taskID string, assignee string) (*model.Task, error) {
+func (s *projectDB) AssignTask(projectSlug string, taskID string, assignee string) (*model.Task, error) {
 	slug, task, err := s.mutateTask(projectSlug, taskID, func(_ *sql.Tx, _ string, t *model.Task) error {
 		t.Assignee = strings.TrimSpace(assignee)
 		t.UpdatedAt = time.Now()
@@ -941,14 +931,53 @@ func (s *Store) AssignTask(projectSlug string, taskID string, assignee string) (
 	return task, nil
 }
 
-func (s *Store) DeleteTask(projectSlug string, taskID string) error {
+func (s *projectDB) DeleteTask(projectSlug string, taskID string, expected ...time.Time) error {
 	err := s.withTx(func(tx *sql.Tx) error {
 		projectSlug = s.resolveSlug(tx, projectSlug)
+		if len(expected) > 0 {
+			if e := checkPrecondition(tx, Precondition{Slug: projectSlug, Kind: "task", ID: taskID, UpdatedAt: expected[0]}); e != nil {
+				return e
+			}
+		}
 		if err := projectExists(tx, projectSlug); err != nil {
 			return err
 		}
 		if !taskExists(tx, projectSlug, taskID) {
 			return fmt.Errorf("task ID '%s' not found in project '%s'", taskID, projectSlug)
+		}
+		// Cascading edge removals also change the surviving dependent tasks.
+		tasks, e := loadTasks(tx, projectSlug, "", nil)
+		if e != nil {
+			return e
+		}
+		doomed := map[string]bool{taskID: true}
+		changed := true
+		for changed {
+			changed = false
+			for _, t := range tasks {
+				if !doomed[t.ID] && doomed[t.ParentID] {
+					doomed[t.ID] = true
+					changed = true
+				}
+			}
+		}
+		for _, t := range tasks {
+			if doomed[t.ID] {
+				continue
+			}
+			deps := []string{}
+			for _, id := range t.DependsOn {
+				if !doomed[id] {
+					deps = append(deps, id)
+				}
+			}
+			if len(deps) != len(t.DependsOn) {
+				t.DependsOn = deps
+				t.UpdatedAt = monotonicTime(t.UpdatedAt)
+				if e := updateTaskRow(tx, projectSlug, t); e != nil {
+					return e
+				}
+			}
 		}
 		// Subtasks and dependency edges go by cascade.
 		if _, err := tx.Exec(`DELETE FROM tasks WHERE project_slug = ? AND id = ?`, projectSlug, taskID); err != nil {
@@ -970,20 +999,20 @@ func (s *Store) DeleteTask(projectSlug string, taskID string) error {
 
 // GetMCPUserInstructions returns the user-defined portion of MCP instructions.
 // Returns an empty string when the user has not set custom instructions yet.
-func (s *Store) GetMCPUserInstructions() string {
+func (s *projectDB) GetMCPUserInstructions() string {
 	v, _ := getSetting(s.db, settingMCPUserInstructions)
 	return v
 }
 
 // SaveMCPUserInstructions persists the user-defined portion of MCP instructions.
-func (s *Store) SaveMCPUserInstructions(instructions string) error {
+func (s *projectDB) SaveMCPUserInstructions(instructions string) error {
 	return s.withTx(func(tx *sql.Tx) error {
 		return setSetting(tx, settingMCPUserInstructions, instructions)
 	})
 }
 
 // DeprecateTask marks a task as deprecated and completed (or undeprecates it).
-func (s *Store) DeprecateTask(projectSlug string, taskID string, deprecated bool) (*model.Task, error) {
+func (s *projectDB) DeprecateTask(projectSlug string, taskID string, deprecated bool) (*model.Task, error) {
 	slug, task, err := s.mutateTask(projectSlug, taskID, func(_ *sql.Tx, _ string, t *model.Task) error {
 		t.Deprecated = deprecated
 		now := time.Now()

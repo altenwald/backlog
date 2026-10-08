@@ -20,7 +20,7 @@ const legacyProjectJSON = `{
   "tasks": [
     {"id": "3", "parent_id": "1", "title": "Child before parent", "description": "", "size": "S", "tier": 2, "done": false, "created_at": "2025-01-03T00:00:00Z", "updated_at": "2025-01-03T00:00:00Z"},
     {"id": "1", "title": "Root", "description": "Árbol con tildes", "size": "L", "tier": 1, "done": true, "resolution": "done in abc123", "created_at": "2025-01-02T00:00:00Z", "updated_at": "2025-01-02T00:00:00Z", "done_at": "2025-01-05T00:00:00Z"},
-    {"id": "7", "title": "Depends", "description": "", "size": "M", "tier": 3, "done": false, "depends_on": ["3", "99", "3"], "assignee": "claude", "inserted_at": "2025-01-04T00:00:00Z", "updated_at": "2025-01-04T00:00:00Z"}
+    {"id": "7", "title": "Depends", "description": "", "size": "M", "tier": 3, "done": false, "depends_on": ["3", "3"], "assignee": "claude", "inserted_at": "2025-01-04T00:00:00Z", "updated_at": "2025-01-04T00:00:00Z"}
   ]
 }`
 
@@ -77,7 +77,7 @@ func TestImportLegacyJSON(t *testing.T) {
 		t.Fatalf("parent lost: %+v", p.Tasks[0])
 	}
 	if deps := p.Tasks[2].DependsOn; len(deps) != 1 || deps[0] != "3" {
-		t.Fatalf("expected dangling and duplicate deps dropped, got %v", deps)
+		t.Fatalf("expected duplicate deps deduplicated, got %v", deps)
 	}
 
 	// Unicode search keeps working (SQLite's lower() is ASCII-only).
@@ -92,13 +92,9 @@ func TestImportLegacyJSON(t *testing.T) {
 		t.Fatalf("AddTask after import: %v %+v", err, nt)
 	}
 
-	// JSON files are moved aside, not deleted.
-	if _, err := os.Stat(filepath.Join(dir, "projects")); !os.IsNotExist(err) {
-		t.Fatalf("projects dir should have been moved, stat err = %v", err)
-	}
-	backups, _ := filepath.Glob(filepath.Join(dir, "json-backup-*", "projects", "legacy.json"))
-	if len(backups) != 1 {
-		t.Fatalf("expected JSON backup, found %v", backups)
+	// Original JSON stays untouched and is ignored after activation.
+	if _, err := os.Stat(filepath.Join(dir, "projects", "legacy.json")); err != nil {
+		t.Fatal(err)
 	}
 
 	// Reopening does not import again.

@@ -17,11 +17,11 @@ type Server struct {
 	httpServer *http.Server
 	sseServer  *server.SSEServer
 	mcpServer  *server.MCPServer
-	store      *store.Store
+	store      store.Backend
 	port       int
 }
 
-func NewServer(st *store.Store, port int) *Server {
+func NewServer(st store.Backend, port int) *Server {
 	if port <= 0 {
 		port = 8484
 	}

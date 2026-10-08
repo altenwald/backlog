@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -27,7 +28,7 @@ const (
 type SpecView struct {
 	Container fyne.CanvasObject
 
-	store  *store.Store
+	store  store.Backend
 	window fyne.Window
 
 	pageList   *widget.List
@@ -53,10 +54,11 @@ type SpecView struct {
 	loaded     model.SpecSection // last stored version of the open page
 	editMode   bool
 	modified   bool
+	saving     bool
 	syncing    bool // true while the view itself sets entry text
 }
 
-func NewSpecView(st *store.Store, win fyne.Window) *SpecView {
+func NewSpecView(st store.Backend, win fyne.Window) *SpecView {
 	v := &SpecView{store: st, window: win}
 
 	v.pageList = widget.NewList(
@@ -115,6 +117,19 @@ func NewSpecView(st *store.Store, win fyne.Window) *SpecView {
 	v.editBtn = widget.NewButtonWithIcon("Edit", theme.DocumentCreateIcon(), func() { v.setEditMode(true) })
 	v.saveBtn = widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), func() { v.Save() })
 	v.saveBtn.Importance = widget.HighImportance
+	discard := widget.NewButton("Discard", func() {
+		if v.saving {
+			return
+		}
+		dialog.ShowConfirm("Discard draft", "Discard your unsaved page edits?", func(ok bool) {
+			if ok {
+				v.modified = false
+				v.setEntries(v.loaded.Title, v.loaded.Body)
+				v.Refresh()
+				v.setEditMode(false)
+			}
+		}, v.window)
+	})
 
 	addBtn := widget.NewButtonWithIcon("New page", theme.ContentAddIcon(), func() { v.showNewPage("", "") })
 	addBtn.Importance = widget.LowImportance
@@ -132,7 +147,7 @@ func NewSpecView(st *store.Store, win fyne.Window) *SpecView {
 		v.pageList,
 	)
 	header := container.NewBorder(nil, nil, v.backBtn,
-		container.NewHBox(v.status, v.previewBtn, v.editBtn, v.saveBtn),
+		container.NewHBox(v.status, v.previewBtn, v.editBtn, discard, v.saveBtn),
 		v.titleLabel,
 	)
 	editor := container.NewBorder(container.NewVBox(header, widget.NewSeparator()), nil, nil, nil, v.contentStack)
@@ -154,6 +169,9 @@ func (v *SpecView) Refresh() {
 	if slug != v.slug {
 		if v.modified {
 			v.Save()
+			if v.modified {
+				return
+			}
 		}
 		v.slug = slug
 		v.selectedID = ""
@@ -163,7 +181,10 @@ func (v *SpecView) Refresh() {
 		v.status.SetText("")
 	}
 
-	v.reloadIndex()
+	if err := v.reloadIndex(); err != nil {
+		v.status.SetText(err.Error())
+		return
+	}
 
 	if len(v.index) == 0 {
 		// No pages yet: the main page is created on first save.
@@ -185,6 +206,10 @@ func (v *SpecView) Refresh() {
 
 	target := v.selectedID
 	if v.indexOf(target) < 0 {
+		if v.modified {
+			v.status.SetText("Page removed elsewhere. Your draft is preserved.")
+			return
+		}
 		target = model.SpecMainID
 		v.modified = false
 	}
@@ -209,13 +234,19 @@ func (v *SpecView) Refresh() {
 	v.updateButtons()
 }
 
-func (v *SpecView) reloadIndex() {
-	v.index = nil
+func (v *SpecView) reloadIndex() error {
+	var index []model.SpecSectionInfo
 	if v.slug != "" {
-		v.index, _ = v.store.ListSpecSections(v.slug)
+		var err error
+		index, err = v.store.ListSpecSections(v.slug)
+		if err != nil {
+			return err
+		}
 	}
+	v.index = index
 	v.unlinked = model.SpecUnreachable(v.index)
 	v.pageList.Refresh()
+	return nil
 }
 
 func (v *SpecView) indexOf(id string) int {
@@ -245,6 +276,9 @@ func (v *SpecView) Open(id string) {
 	}
 	if v.modified {
 		v.Save()
+		if v.modified {
+			return
+		}
 	}
 	if v.selectedID != "" {
 		v.history = append(v.history, v.selectedID)
@@ -405,20 +439,75 @@ func (v *SpecView) Save() {
 		v.setEditMode(false)
 		return
 	}
-	title, body := v.titleEntry.Text, v.bodyEntry.Text
-	saved, err := v.store.UpdateSpecSection(v.slug, v.selectedID, &title, &body)
-	if err != nil {
-		v.status.SetText("Could not save")
+	if v.saving {
 		return
 	}
-	v.loaded = *saved
-	v.modified = false
-	v.titleLabel.SetText(saved.Title)
-	v.status.SetText("Saved")
-	v.reloadIndex()
-	v.setEditMode(false)
-	v.selectListRow(v.selectedID)
-	v.updateButtons()
+	title, body := v.titleEntry.Text, v.bodyEntry.Text
+	slug, id, version := v.slug, v.selectedID, v.loaded.UpdatedAt
+	v.saving = true
+	finish := func(saved *model.SpecSection, err error) {
+		v.saving = false
+		if v.slug != slug || v.selectedID != id {
+			return
+		}
+		if err != nil {
+			v.status.SetText(err.Error())
+			if errors.Is(err, store.ErrStale) {
+				dialog.ShowConfirm("Page changed", "Your draft is kept. Read the current page before applying it again?", func(ok bool) {
+					if !ok {
+						return
+					}
+					go func() {
+						if r, ok := v.store.(interface{ ReloadProject(string) error }); ok {
+							if e := r.ReloadProject(slug); e != nil {
+								fyne.Do(func() { dialog.ShowError(e, v.window) })
+								return
+							}
+						}
+						pages, e := v.store.GetSpecSections(slug, []string{id})
+						fyne.Do(func() {
+							if e != nil || len(pages) == 0 {
+								dialog.ShowError(errors.New("page is unavailable"), v.window)
+								return
+							}
+							current := pages[0]
+							dialog.ShowConfirm("Current page", current.Title+"\n\n"+current.Body+"\n\nKeep your draft for another explicit save?", func(accept bool) {
+								if accept && v.slug == slug && v.selectedID == id {
+									v.loaded = current
+									v.status.SetText("Current version read. Review your draft and save again.")
+								}
+							}, v.window)
+						})
+					}()
+				}, v.window)
+			}
+			return
+		}
+		v.loaded = *saved
+		if v.titleEntry.Text == title && v.bodyEntry.Text == body {
+			v.modified = false
+			v.setEditMode(false)
+		}
+		v.titleLabel.SetText(saved.Title)
+		v.status.SetText("Saved")
+		v.reloadIndex()
+		v.selectListRow(id)
+		v.updateButtons()
+	}
+	if strings.Contains(slug, "::") {
+		go func() {
+			saved, e := v.store.UpdateSpecSection(slug, id, &title, &body, version)
+			if e == nil {
+				if r, ok := v.store.(interface{ ReloadProject(string) error }); ok {
+					e = r.ReloadProject(slug)
+				}
+			}
+			fyne.Do(func() { finish(saved, e) })
+		}()
+	} else {
+		saved, e := v.store.UpdateSpecSection(slug, id, &title, &body, version)
+		finish(saved, e)
+	}
 }
 
 // showNewPage asks for a title and creates a page. With an id (a link to a
@@ -449,15 +538,13 @@ func (v *SpecView) showNewPage(id, title string) {
 func (v *SpecView) createPage(id, title string) {
 	if v.modified {
 		v.Save()
+		if v.modified {
+			return
+		}
 	}
-	page, err := v.store.AddSpecSection(v.slug, id, title, "", -1)
-	if err != nil {
-		dialog.ShowError(err, v.window)
-		return
-	}
-	v.reloadIndex()
-	v.Open(page.ID)
-	v.setEditMode(true)
+	slug := v.slug
+	var page *model.SpecSection
+	v.mutate(func() error { var e error; page, e = v.store.AddSpecSection(slug, id, title, "", -1); return e }, func() { v.reloadIndex(); v.Open(page.ID); v.setEditMode(true) })
 }
 
 // showInsertLink inserts a link to an existing page at the cursor.
@@ -505,14 +592,12 @@ func (v *SpecView) moveSelected(delta int) {
 	}
 	if v.modified {
 		v.Save()
+		if v.modified {
+			return
+		}
 	}
-	if err := v.store.MoveSpecSection(v.slug, v.selectedID, i+delta); err != nil {
-		v.status.SetText("Could not move")
-		return
-	}
-	v.reloadIndex()
-	v.selectListRow(v.selectedID)
-	v.updateButtons()
+	slug, id := v.slug, v.selectedID
+	v.mutate(func() error { return v.store.MoveSpecSection(slug, id, i+delta) }, func() { v.reloadIndex(); v.selectListRow(id); v.updateButtons() })
 }
 
 func (v *SpecView) confirmDelete() {
@@ -520,6 +605,7 @@ func (v *SpecView) confirmDelete() {
 		return
 	}
 	id, title := v.selectedID, v.loaded.Title
+	slug, version := v.slug, v.loaded.UpdatedAt
 	msg := fmt.Sprintf("Delete the page %q? This cannot be undone.", title)
 	if n := len(model.SpecBacklinks(v.index, id)); n > 0 {
 		msg += fmt.Sprintf("\n%d page(s) link to it; those links will show as missing pages.", n)
@@ -528,11 +614,33 @@ func (v *SpecView) confirmDelete() {
 		if !ok {
 			return
 		}
-		if err := v.store.DeleteSpecSection(v.slug, id); err != nil {
+		v.mutate(func() error { return v.store.DeleteSpecSection(slug, id, version) }, func() { v.modified = false; v.Refresh() })
+	}, v.window)
+}
+
+// mutate performs remote I/O outside the Fyne event thread.
+func (v *SpecView) mutate(fn func() error, success func()) {
+	slug := v.slug
+	finish := func(err error) {
+		if err != nil {
 			dialog.ShowError(err, v.window)
 			return
 		}
-		v.modified = false
-		v.Refresh()
-	}, v.window)
+		if v.slug == slug {
+			success()
+		}
+	}
+	if strings.Contains(slug, "::") {
+		go func() {
+			e := fn()
+			if e == nil {
+				if r, ok := v.store.(interface{ ReloadProject(string) error }); ok {
+					e = r.ReloadProject(slug)
+				}
+			}
+			fyne.Do(func() { finish(e) })
+		}()
+	} else {
+		finish(fn())
+	}
 }

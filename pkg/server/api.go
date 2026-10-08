@@ -12,10 +12,10 @@ import (
 )
 
 type APIHandler struct {
-	store *store.Store
+	store store.Backend
 }
 
-func NewAPIHandler(st *store.Store) *APIHandler {
+func NewAPIHandler(st store.Backend) *APIHandler {
 	return &APIHandler{store: st}
 }
 

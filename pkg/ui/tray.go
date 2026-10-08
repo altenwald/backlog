@@ -20,13 +20,13 @@ import (
 type TrayManager struct {
 	app        fyne.App
 	window     fyne.Window
-	store      *store.Store
+	store      store.Backend
 	iconBytes  []byte
 	iconRes    fyne.Resource
 	onAddClick func()
 }
 
-func NewTrayManager(app fyne.App, window fyne.Window, st *store.Store, onAddClick func()) *TrayManager {
+func NewTrayManager(app fyne.App, window fyne.Window, st store.Backend, onAddClick func()) *TrayManager {
 	rawPNG := createBacklogLineLogo(32)
 	baseRes := fyne.NewStaticResource("backlog_tray.png", rawPNG)
 	// Use ThemedResource so Fyne sets it as macOS template icon on initial load

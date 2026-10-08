@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"github.com/altenwald/backlog/pkg/network"
 	"log"
 
 	"github.com/altenwald/backlog/pkg/server"
@@ -46,7 +48,19 @@ func runStartApp(cmd *cobra.Command, args []string) error {
 		_ = st.SetActiveProject(proj)
 	}
 
-	srv := server.NewServer(st, flagPort)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() { cancel(); st.Close() }()
+	lan, err := network.NewService(st)
+	if err != nil {
+		return err
+	}
+	hub := network.NewHub(ctx, st, lan)
+	app := ui.NewBacklogApp(hub)
+	if err = lan.Start(ctx, flagPort+2); err != nil {
+		return fmt.Errorf("LAN service: %w", err)
+	}
+	srv := server.NewServer(network.NewCommands(hub), flagPort)
+	defer srv.Stop(context.Background())
 	go func() {
 		log.Printf("[Backlog Server] Listening REST API on http://127.0.0.1:%d", flagPort)
 		log.Printf("[Backlog Server] Listening MCP SSE on http://127.0.0.1:%d/sse", flagPort+1)
@@ -55,7 +69,6 @@ func runStartApp(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	app := ui.NewBacklogApp(st)
 	app.Run()
 
 	return nil

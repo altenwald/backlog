@@ -1,11 +1,9 @@
 package store
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -73,8 +71,7 @@ func readLegacy(dataDir string) (legacyConfig, []*model.Project, error) {
 }
 
 // importProject inserts a project and its tasks. Dangling parent or
-// dependency references (possible after hand edits of the JSON) are dropped
-// and logged rather than failing the whole import.
+// dependency references fail the import, preserving the original source for repair.
 func importProject(q querier, p *model.Project) error {
 	now := time.Now()
 	if p.InsertedAt.IsZero() {
@@ -105,8 +102,7 @@ func importProject(q querier, p *model.Project) error {
 
 	for _, t := range p.Tasks {
 		if t.ParentID != "" && !ids[t.ParentID] {
-			log.Printf("[Backlog import] %s#%s: dropping missing parent #%s", p.Slug, t.ID, t.ParentID)
-			t.ParentID = ""
+			return fmt.Errorf("project %s task %s: missing parent %s; original data preserved", p.Slug, t.ID, t.ParentID)
 		}
 		var deps []string
 		seen := make(map[string]bool)
@@ -117,8 +113,7 @@ func importProject(q querier, p *model.Project) error {
 			}
 			seen[d] = true
 			if !ids[d] || d == t.ID {
-				log.Printf("[Backlog import] %s#%s: dropping invalid dependency #%s", p.Slug, t.ID, d)
-				continue
+				return fmt.Errorf("project %s task %s: invalid dependency %s; original data preserved", p.Slug, t.ID, d)
 			}
 			deps = append(deps, d)
 		}
@@ -143,102 +138,4 @@ func importProject(q querier, p *model.Project) error {
 	}
 
 	return saveSections(q, p.Slug, p.Spec)
-}
-
-// importLegacy builds backlog.db from the JSON files. The database is built
-// under a temporary name and only renamed into place once complete; the JSON
-// files are then moved to a json-backup-<timestamp> directory, never deleted.
-func importLegacy(dataDir string) error {
-	cfg, projects, err := readLegacy(dataDir)
-	if err != nil {
-		return err
-	}
-
-	dbPath := filepath.Join(dataDir, dbFileName)
-	tmpPath := dbPath + ".importing"
-	for _, suffix := range []string{"", "-wal", "-shm"} {
-		_ = os.Remove(tmpPath + suffix)
-	}
-
-	db, err := openDB(tmpPath)
-	if err != nil {
-		return err
-	}
-	cleanup := func() {
-		_ = db.Close()
-		for _, suffix := range []string{"", "-wal", "-shm"} {
-			_ = os.Remove(tmpPath + suffix)
-		}
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		cleanup()
-		return err
-	}
-	if err := importAll(tx, cfg, projects); err != nil {
-		_ = tx.Rollback()
-		cleanup()
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		cleanup()
-		return err
-	}
-	// Fold the WAL into the main file so a single file can be renamed.
-	if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
-		cleanup()
-		return err
-	}
-	if err := db.Close(); err != nil {
-		cleanup()
-		return err
-	}
-	for _, suffix := range []string{"-wal", "-shm"} {
-		_ = os.Remove(tmpPath + suffix)
-	}
-	if err := os.Rename(tmpPath, dbPath); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-
-	backupDir := filepath.Join(dataDir, "json-backup-"+time.Now().Format("20060102-150405"))
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
-		return err
-	}
-	for _, name := range []string{"config.json", "projects"} {
-		src := filepath.Join(dataDir, name)
-		if _, err := os.Stat(src); err == nil {
-			if err := os.Rename(src, filepath.Join(backupDir, name)); err != nil {
-				return fmt.Errorf("imported into %s but could not move %s to %s: %w", dbPath, src, backupDir, err)
-			}
-		}
-	}
-
-	total := 0
-	for _, p := range projects {
-		total += len(p.Tasks)
-	}
-	log.Printf("[Backlog import] imported %d projects and %d tasks into %s; JSON files moved to %s",
-		len(projects), total, dbPath, backupDir)
-	return nil
-}
-
-func importAll(tx *sql.Tx, cfg legacyConfig, projects []*model.Project) error {
-	for _, p := range projects {
-		if err := importProject(tx, p); err != nil {
-			return err
-		}
-	}
-	if cfg.ActiveProject != "" {
-		if err := setSetting(tx, settingActiveProject, strings.ToLower(cfg.ActiveProject)); err != nil {
-			return err
-		}
-	}
-	if cfg.MCPUserInstructions != "" {
-		if err := setSetting(tx, settingMCPUserInstructions, cfg.MCPUserInstructions); err != nil {
-			return err
-		}
-	}
-	return nil
 }

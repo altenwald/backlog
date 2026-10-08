@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -19,11 +20,11 @@ var appIconBytes []byte
 type BacklogApp struct {
 	fyneApp       fyne.App
 	window        fyne.Window
-	store         *store.Store
+	store         store.Backend
 	tray          *TrayManager
 	summaryBar    *SummaryBar
 	filterBar     *FilterBar
-	projectSelect *widget.Select
+	projectSelect *widget.Button
 	currentFilter model.TaskFilter
 
 	tasksList      *widget.List
@@ -34,14 +35,15 @@ type BacklogApp struct {
 	taskPlacements map[string]taskPlacement
 	selectedTaskID string
 
-	specView *SpecView
+	specView      *SpecView
+	addTaskButton *widget.Button
 }
 
 func GetAppIconResource() fyne.Resource {
 	return fyne.NewStaticResource("icon.png", appIconBytes)
 }
 
-func NewBacklogApp(st *store.Store) *BacklogApp {
+func NewBacklogApp(st store.Backend) *BacklogApp {
 	a := app.NewWithID("com.altenwald.backlog")
 	a.Settings().SetTheme(NewBacklogTheme())
 	iconRes := GetAppIconResource()
@@ -58,6 +60,7 @@ func NewBacklogApp(st *store.Store) *BacklogApp {
 	}
 
 	bApp.buildUI()
+	bApp.configureNetwork()
 
 	// Set Main Menu with About and Settings items (intercepts macOS application menu)
 	aboutMenuItem := fyne.NewMenuItem("About", func() {
@@ -97,18 +100,36 @@ func (ba *BacklogApp) buildUI() {
 	ba.currentFilter = ba.filterBar.CurrentFilter()
 
 	// Project selector
-	ba.projectSelect = widget.NewSelect([]string{}, func(selectedName string) {
-		activeSlug := ba.store.GetActiveProjectSlug()
-		for _, p := range ba.store.ListProjects() {
-			if (p.Name == selectedName || p.Slug == selectedName) && p.Slug != activeSlug {
-				// Keep unsaved edits of the current section before switching project
-				if ba.specView != nil {
-					ba.specView.Save()
-				}
-				_ = ba.store.SetActiveProject(p.Slug)
-				break
+	ba.projectSelect = widget.NewButton("Select project", func() {
+		projects := ba.store.ListProjects()
+		items := []*fyne.MenuItem{}
+		group := ""
+		for _, p := range projects {
+			if p.RemoteID != group {
+				group = p.RemoteID
+				items = append(items, fyne.NewMenuItemSeparator())
+				heading := fyne.NewMenuItem(p.Machine, nil)
+				heading.Disabled = true
+				items = append(items, heading)
 			}
+			slug := p.Slug
+			label := p.Name
+			if p.Disconnected {
+				label += " (disconnected)"
+			}
+			item := fyne.NewMenuItem(label, func() {
+				if ba.specView != nil && ba.specView.modified {
+					dialog.ShowInformation("Unsaved page", "Save or discard your page edits before switching projects.", ba.window)
+					return
+				}
+				if err := ba.store.SetActiveProject(slug); err != nil {
+					dialog.ShowError(err, ba.window)
+				}
+			})
+			items = append(items, item)
 		}
+		menu := widget.NewPopUpMenu(fyne.NewMenu("Projects", items...), ba.window.Canvas())
+		menu.ShowAtPosition(fyne.CurrentApp().Driver().AbsolutePositionForObject(ba.projectSelect).Add(fyne.NewPos(0, ba.projectSelect.Size().Height)))
 	})
 
 	newProjectBtn := widget.NewButtonWithIcon("New project", theme.FolderNewIcon(), func() {
@@ -141,12 +162,15 @@ func (ba *BacklogApp) buildUI() {
 		ba.showAddTask()
 	})
 	addTaskBtn.Importance = widget.HighImportance
+	ba.addTaskButton = addTaskBtn
 
 	headerLeft := container.NewHBox(
 		widget.NewLabelWithStyle("Backlog", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		container.NewGridWrap(fyne.NewSize(210, 38), ba.projectSelect),
 		newProjectBtn,
 		deleteProjectBtn,
+		widget.NewButton("Sharing", ba.showSharing),
+		widget.NewButton("Network", ba.showNetwork),
 	)
 
 	header := container.NewBorder(nil, nil, headerLeft, addTaskBtn)
@@ -159,7 +183,7 @@ func (ba *BacklogApp) buildUI() {
 		func() fyne.CanvasObject {
 			return NewTaskRowItem(func(taskID string, done bool) {
 				activeSlug := ba.store.GetActiveProjectSlug()
-				_, _ = ba.store.CompleteTask(activeSlug, taskID, done)
+				ba.toggleTask(activeSlug, taskID, &done, nil)
 			})
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
@@ -197,34 +221,20 @@ func (ba *BacklogApp) buildUI() {
 
 	// Right section (Tabs: 1. Tasks & Details, 2. Specification Text Editor)
 	detailCallbacks := TaskDetailCallbacks{
-		OnToggleDone: func(taskID string, done bool) {
-			activeSlug := ba.store.GetActiveProjectSlug()
-			if updated, err := ba.store.CompleteTask(activeSlug, taskID, done); err == nil {
-				ba.detailView.ShowTask(*updated)
-			}
-		},
+		OnToggleDone: func(taskID string, done bool) { ba.toggleTask(ba.store.GetActiveProjectSlug(), taskID, &done, nil) },
 		OnDeprecate: func(taskID string, deprecated bool) {
-			activeSlug := ba.store.GetActiveProjectSlug()
-			if updated, err := ba.store.DeprecateTask(activeSlug, taskID, deprecated); err == nil {
-				ba.detailView.ShowTask(*updated)
-			}
+			ba.toggleTask(ba.store.GetActiveProjectSlug(), taskID, nil, &deprecated)
 		},
-		OnEdit: func(task model.Task) {
-			activeSlug := ba.store.GetActiveProjectSlug()
-			ShowEditTaskDialog(ba.window, task, func(updated model.Task) {
-				if saved, err := ba.store.UpdateTask(activeSlug, model.TaskUpdate{
-					ID: updated.ID, Title: updated.Title, Description: &updated.Description,
-					ParentID: updated.ParentID, DependsOn: updated.DependsOn,
-					Size: updated.Size, Tier: updated.Tier,
-					Resolution: updated.Resolution, Assignee: updated.Assignee,
-				}); err == nil {
-					ba.detailView.ShowTask(*saved)
-				}
-			})
-		},
+		OnEdit: func(task model.Task) { ba.editTask(ba.store.GetActiveProjectSlug(), task) },
 		OnDelete: func(taskID string) {
 			activeSlug := ba.store.GetActiveProjectSlug()
-			_ = ba.store.DeleteTask(activeSlug, taskID)
+			for _, task := range ba.displayedTasks {
+				if task.ID == taskID {
+					version := task.UpdatedAt
+					ba.runMutation(func() error { return ba.store.DeleteTask(activeSlug, taskID, version) })
+					break
+				}
+			}
 			ba.selectedTaskID = ""
 			ba.detailView.Clear()
 		},
@@ -258,9 +268,7 @@ func (ba *BacklogApp) buildUI() {
 func (ba *BacklogApp) showAddTask() {
 	activeSlug := ba.store.GetActiveProjectSlug()
 	ShowAddTaskDialog(ba.window, activeSlug, func(task model.Task) {
-		if added, err := ba.store.AddTask(activeSlug, task); err == nil {
-			ba.selectedTaskID = added.ID
-		}
+		ba.runMutation(func() error { _, err := ba.store.AddTask(activeSlug, task); return err })
 	})
 }
 
@@ -268,17 +276,20 @@ func (ba *BacklogApp) refreshProjects() {
 	projects := ba.store.ListProjects()
 	activeSlug := ba.store.GetActiveProjectSlug()
 
-	var options []string
-	var selectedOption string
+	label := "Select project"
 	for _, p := range projects {
-		options = append(options, p.Name)
 		if p.Slug == activeSlug {
-			selectedOption = p.Name
+			label = p.Name
+			if p.Machine != "" {
+				label = p.Machine + " / " + label
+			}
+			if p.Disconnected {
+				label += " (disconnected)"
+			}
+			break
 		}
 	}
-	ba.projectSelect.Options = options
-	ba.projectSelect.Selected = selectedOption
-	ba.projectSelect.Refresh()
+	ba.projectSelect.SetText(label)
 }
 
 func (ba *BacklogApp) refreshTasks() {
@@ -305,6 +316,13 @@ func (ba *BacklogApp) refreshTasks() {
 	}
 
 	tasks, err := ba.store.ListTasks(activeSlug, ba.currentFilter)
+	if ba.addTaskButton != nil {
+		if err != nil {
+			ba.addTaskButton.Disable()
+		} else {
+			ba.addTaskButton.Enable()
+		}
+	}
 	if err != nil {
 		ba.displayedTasks = nil
 		ba.selectedTaskID = ""
@@ -375,7 +393,8 @@ func (ba *BacklogApp) refreshAll() {
 }
 
 func (ba *BacklogApp) listenEvents() {
-	ch := ba.store.Subscribe()
+	ch, cancel := ba.store.Watch()
+	defer cancel()
 	for range ch {
 		fyne.Do(func() {
 			ba.refreshAll()

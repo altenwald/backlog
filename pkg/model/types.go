@@ -97,15 +97,18 @@ type Task struct {
 // TaskUpdate contains editable fields. A nil Description or DependsOn leaves
 // the stored value unchanged; an empty value explicitly clears it.
 type TaskUpdate struct {
-	ID          string   `json:"id"`
-	Title       string   `json:"title,omitempty"`
-	Description *string  `json:"description,omitempty"`
-	ParentID    string   `json:"parent_id,omitempty"`
-	DependsOn   []string `json:"depends_on,omitzero"`
-	Size        Size     `json:"size,omitempty"`
-	Tier        Tier     `json:"tier,omitempty"`
-	Resolution  string   `json:"resolution,omitempty"`
-	Assignee    string   `json:"assignee,omitempty"`
+	ExpectedUpdatedAt *time.Time `json:"expected_updated_at,omitempty"`
+	Done              *bool      `json:"done,omitempty"`
+	Deprecated        *bool      `json:"deprecated,omitempty"`
+	ID                string     `json:"id"`
+	Title             string     `json:"title,omitempty"`
+	Description       *string    `json:"description,omitempty"`
+	ParentID          string     `json:"parent_id,omitempty"`
+	DependsOn         []string   `json:"depends_on,omitzero"`
+	Size              Size       `json:"size,omitempty"`
+	Tier              Tier       `json:"tier,omitempty"`
+	Resolution        string     `json:"resolution,omitempty"`
+	Assignee          string     `json:"assignee,omitempty"`
 }
 
 // IsBlocked returns true if any dependency task is not completed.
@@ -151,13 +154,17 @@ func (t *Task) UnmarshalJSON(data []byte) error {
 }
 
 type Project struct {
-	Slug        string        `json:"slug"` // e.g. "my-project"
-	Name        string        `json:"name"`
-	Description string        `json:"description"`
-	Spec        []SpecSection `json:"spec,omitempty"` // Composite project definition & tickets reference, in sections
-	Tasks       []Task        `json:"tasks"`
-	InsertedAt  time.Time     `json:"inserted_at"`
-	UpdatedAt   time.Time     `json:"updated_at"`
+	Machine      string        `json:"machine,omitempty"`
+	RemoteID     string        `json:"remote_id,omitempty"`
+	Disconnected bool          `json:"disconnected,omitempty"`
+	Open         bool          `json:"open"`
+	Slug         string        `json:"slug"` // e.g. "my-project"
+	Name         string        `json:"name"`
+	Description  string        `json:"description"`
+	Spec         []SpecSection `json:"spec,omitempty"` // Composite project definition & tickets reference, in sections
+	Tasks        []Task        `json:"tasks"`
+	InsertedAt   time.Time     `json:"inserted_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
 }
 
 func (p *Project) UnmarshalJSON(data []byte) error {

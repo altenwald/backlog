@@ -1,4 +1,4 @@
-.PHONY: build test bundle dmg clean
+.PHONY: build test bundle dmg dmg-deps dmg-package clean
 
 APP_NAME = Backlog
 BUNDLE_DIR = bin/$(APP_NAME).app
@@ -62,19 +62,20 @@ bundle:
 	@echo "✔ Universal $(BUNDLE_DIR) created for macOS $(MIN_MACOS_VER)+!"
 	@file $(BUNDLE_DIR)/Contents/MacOS/backlog
 
+# Override PYTHON when python3 is Apple's older system Python.
+PYTHON ?= python3
+
+dmg-deps:
+	@$(PYTHON) -c 'import sys; assert sys.version_info >= (3, 10), "DMG packaging requires Python 3.10+"'
+	@$(PYTHON) -m venv bin/dmg-venv
+	@bin/dmg-venv/bin/python -m pip install -r build/macos/dmg/requirements.txt
+
 dmg: bundle
-	@echo "Creating DMG..."
-	@rm -rf bin/dmg_staging bin/$(APP_NAME).dmg bin/backlog-temp.dmg
-	@mkdir -p bin/dmg_staging
-	@cp -R $(BUNDLE_DIR) bin/dmg_staging/
-	@hdiutil create -volname "$(APP_NAME)" -srcfolder bin/dmg_staging -ov -format UDRW bin/backlog-temp.dmg
-	@rm -rf bin/dmg_staging
-	@DEVICE=$$(hdiutil attach -readwrite -noverify -noautoopen bin/backlog-temp.dmg | egrep '^/dev/' | sed 1q | awk '{print $$1}'); \
-	cd /Volumes/$(APP_NAME) && ln -s /Applications && cd -; \
-	hdiutil detach "$$DEVICE"
-	@hdiutil convert bin/backlog-temp.dmg -format UDZO -o bin/$(APP_NAME).dmg
-	@rm -f bin/backlog-temp.dmg
-	@echo "✔ bin/$(APP_NAME).dmg created!"
+	@$(MAKE) dmg-package
+
+# Use this after signing: it packages the existing bundle without rebuilding it.
+dmg-package:
+	@bash build/macos/create-dmg.sh "$(BUNDLE_DIR)" "bin/$(APP_NAME).dmg"
 
 clean:
 	rm -rf bin/

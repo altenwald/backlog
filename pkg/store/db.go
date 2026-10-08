@@ -95,6 +95,8 @@ CREATE INDEX spec_links_to ON spec_links(project_slug, to_id);
 `,
 		after: normalizeStoredSpecs,
 	},
+	{sql: `ALTER TABLE projects ADD COLUMN open INTEGER NOT NULL DEFAULT 0;`},
+	{sql: `CREATE TABLE remote_receipts (request_id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);`},
 }
 
 func openDB(path string) (*sql.DB, error) {

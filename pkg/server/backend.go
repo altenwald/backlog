@@ -39,12 +39,12 @@ type Backend interface {
 	UpdateSettings(mcpUserInstructions string) error
 }
 
-// storeBackend adapts *store.Store to Backend
+// storeBackend adapts store.Backend to Backend
 type storeBackend struct {
-	st *store.Store
+	st store.Backend
 }
 
-func NewStoreBackend(st *store.Store) Backend {
+func NewStoreBackend(st store.Backend) Backend {
 	return &storeBackend{st: st}
 }
 

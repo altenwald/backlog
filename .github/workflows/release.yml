@@ -71,31 +71,21 @@ jobs:
             --sign "$SIGN" \
             bin/Backlog.app
 
+      - name: Setup Python for DMG packaging
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install DMG packaging dependencies
+        run: make dmg-deps
+
       - name: Create & Sign DMG
         env:
           CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
         run: |
           TAG="${{ github.ref_name || inputs.tag_name }}"
-          mkdir -p dmg_staging dist
-          cp -R bin/Backlog.app dmg_staging/
-
-          # Create DMG with symlink to /Applications
-          hdiutil create \
-            -volname "Backlog" \
-            -srcfolder dmg_staging \
-            -ov -format UDRW \
-            backlog-temp.dmg
-          rm -rf dmg_staging
-
-          DEVICE=$(hdiutil attach -readwrite -noverify -noautoopen backlog-temp.dmg | egrep '^/dev/' | sed 1q | awk '{print $1}')
-          cd /Volumes/Backlog && ln -s /Applications && cd -
-          hdiutil detach "$DEVICE"
-
           DMG="dist/backlog-${TAG}-darwin-universal.dmg"
-          hdiutil convert backlog-temp.dmg \
-            -format UDZO \
-            -o "$DMG"
-          rm backlog-temp.dmg
+          bash build/macos/create-dmg.sh bin/Backlog.app "$DMG"
 
           # Sign the DMG if certificate secret is available
           if [ -n "$CERTIFICATE_P12" ]; then

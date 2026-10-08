@@ -400,7 +400,7 @@ var (
 // ShowSettingsDialog opens the application settings window.
 // The core Backlog instructions are shown read-only; the user can freely edit
 // the custom instructions section that is appended to the core prompt.
-func ShowSettingsDialog(parent fyne.Window, st *store.Store) {
+func ShowSettingsDialog(parent fyne.Window, st store.Backend) {
 	activeSettingsMu.Lock()
 	if activeSettingsWindow != nil {
 		win := activeSettingsWindow

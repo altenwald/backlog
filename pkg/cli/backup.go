@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
+	"github.com/altenwald/backlog/pkg/model"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -27,7 +30,13 @@ var backupCmd = &cobra.Command{
 		if len(args) == 1 {
 			dest = args[0]
 		}
-		if err := st.Backup(dest); err != nil {
+		var backupErr error
+		if project := resolveProject(flagProject); project != "" {
+			backupErr = st.ProjectBackup(project, dest)
+		} else {
+			backupErr = st.Backup(dest)
+		}
+		if err := backupErr; err != nil {
 			return err
 		}
 		fmt.Printf("✔ Backup written to %s\n", dest)
@@ -71,14 +80,21 @@ var exportCmd = &cobra.Command{
 }
 
 var importCmd = &cobra.Command{
-	Use:   "import <project.json>",
-	Short: "Add a project from a JSON export or an old JSON project file",
+	Use:   "import <project.json|project.db>",
+	Short: "Add a project from a standalone SQLite backup or JSON export",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		data, err := os.ReadFile(args[0])
+		f, err := os.Open(args[0])
 		if err != nil {
 			return err
 		}
+		header := make([]byte, 16)
+		_, err = io.ReadFull(f, header)
+		f.Close()
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			return err
+		}
+		sqliteFile := bytes.Equal(header, []byte("SQLite format 3\x00"))
 
 		st, err := store.NewStore(flagDataDir)
 		if err != nil {
@@ -86,7 +102,16 @@ var importCmd = &cobra.Command{
 		}
 		defer st.Close()
 
-		p, err := st.ImportProjectJSON(data)
+		var p *model.Project
+		if sqliteFile {
+			p, err = st.ImportProjectDB(args[0])
+		} else {
+			data, e := os.ReadFile(args[0])
+			if e != nil {
+				return e
+			}
+			p, err = st.ImportProjectJSON(data)
+		}
 		if err != nil {
 			return err
 		}

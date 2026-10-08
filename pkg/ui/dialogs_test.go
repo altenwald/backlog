@@ -358,13 +358,19 @@ func TestDeleteActiveProjectAndSwitchToEmptySpecProject(t *testing.T) {
 	bApp.buildUI()
 
 	// Scenario 1: Switch to p1 (legacy project without specification)
-	bApp.projectSelect.Selected = "Project 1"
-	bApp.projectSelect.OnChanged("Project 1")
+	for _, p := range st.ListProjects() {
+		if p.Name == "Project 1" {
+			_ = st.SetActiveProject(p.Slug)
+		}
+	}
 	bApp.refreshAll()
 
 	// Scenario 2: Switch back to p2, set active, then delete p2
-	bApp.projectSelect.Selected = "Project 2"
-	bApp.projectSelect.OnChanged("Project 2")
+	for _, p := range st.ListProjects() {
+		if p.Name == "Project 2" {
+			_ = st.SetActiveProject(p.Slug)
+		}
+	}
 	bApp.refreshAll()
 
 	// Delete p2 while it's active
@@ -423,8 +429,11 @@ func TestRealUserDataProjects(t *testing.T) {
 	bApp.buildUI()
 
 	// Switch to books
-	bApp.projectSelect.Selected = "Altenwald Books"
-	bApp.projectSelect.OnChanged("Altenwald Books")
+	for _, p := range st.ListProjects() {
+		if p.Name == "Altenwald Books" {
+			_ = st.SetActiveProject(p.Slug)
+		}
+	}
 	bApp.refreshAll()
 
 	// Click through all tasks in books to render their markdown descriptions and resolutions
@@ -433,13 +442,19 @@ func TestRealUserDataProjects(t *testing.T) {
 	}
 
 	// Switch to Conta
-	bApp.projectSelect.Selected = "Conta"
-	bApp.projectSelect.OnChanged("Conta")
+	for _, p := range st.ListProjects() {
+		if p.Name == "Conta" {
+			_ = st.SetActiveProject(p.Slug)
+		}
+	}
 	bApp.refreshAll()
 
 	// Switch back to books (legacy, no spec)
-	bApp.projectSelect.Selected = "Altenwald Books"
-	bApp.projectSelect.OnChanged("Altenwald Books")
+	for _, p := range st.ListProjects() {
+		if p.Name == "Altenwald Books" {
+			_ = st.SetActiveProject(p.Slug)
+		}
+	}
 	bApp.refreshAll()
 
 	// Create p2, set active, delete p2
@@ -447,8 +462,11 @@ func TestRealUserDataProjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bApp.projectSelect.Selected = "p2"
-	bApp.projectSelect.OnChanged("p2")
+	for _, p := range st.ListProjects() {
+		if p.Name == "p2" {
+			_ = st.SetActiveProject(p.Slug)
+		}
+	}
 	bApp.refreshAll()
 
 	err = st.DeleteProject("p2")

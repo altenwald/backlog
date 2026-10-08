@@ -157,7 +157,7 @@ func sectionIDs(sections []model.SpecSection) []string {
 
 // withSpecTx resolves the project and runs fn in a write transaction with the
 // current pages, then notifies subscribers.
-func (s *Store) withSpecTx(slug, sectionID string, fn func(tx *sql.Tx, slug string, sections []model.SpecSection) (string, error)) error {
+func (s *projectDB) withSpecTx(slug, sectionID string, fn func(tx *sql.Tx, slug string, sections []model.SpecSection) (string, error)) error {
 	err := s.withTx(func(tx *sql.Tx) error {
 		slug = s.resolveSlug(tx, slug)
 		if err := projectExists(tx, slug); err != nil {
@@ -183,7 +183,7 @@ func (s *Store) withSpecTx(slug, sectionID string, fn func(tx *sql.Tx, slug stri
 	return nil
 }
 
-func (s *Store) readSections(slug string) ([]model.SpecSection, string, error) {
+func (s *projectDB) readSections(slug string) ([]model.SpecSection, string, error) {
 	slug = s.resolveSlug(s.db, slug)
 	if err := projectExists(s.db, slug); err != nil {
 		return nil, slug, err
@@ -193,7 +193,7 @@ func (s *Store) readSections(slug string) ([]model.SpecSection, string, error) {
 }
 
 // GetProjectSpecification returns the whole specification as one markdown document.
-func (s *Store) GetProjectSpecification(slug string) (string, error) {
+func (s *projectDB) GetProjectSpecification(slug string) (string, error) {
 	sections, _, err := s.readSections(slug)
 	if err != nil {
 		return "", err
@@ -203,14 +203,14 @@ func (s *Store) GetProjectSpecification(slug string) (string, error) {
 
 // UpdateProjectSpecification replaces the whole specification, splitting the
 // markdown into pages at each "## " heading.
-func (s *Store) UpdateProjectSpecification(slug, spec string) error {
+func (s *projectDB) UpdateProjectSpecification(slug, spec string) error {
 	return s.withSpecTx(slug, "", func(tx *sql.Tx, slug string, _ []model.SpecSection) (string, error) {
 		return "", saveSections(tx, slug, model.SplitSpec(spec, time.Now()))
 	})
 }
 
 // ListSpecSections returns the page index (no bodies) in display order.
-func (s *Store) ListSpecSections(slug string) ([]model.SpecSectionInfo, error) {
+func (s *projectDB) ListSpecSections(slug string) ([]model.SpecSectionInfo, error) {
 	slug = s.resolveSlug(s.db, slug)
 	if err := projectExists(s.db, slug); err != nil {
 		return nil, err
@@ -248,7 +248,7 @@ func (s *Store) ListSpecSections(slug string) ([]model.SpecSectionInfo, error) {
 
 // GetSpecSections returns the requested pages in the given order, or all of
 // them when ids is empty.
-func (s *Store) GetSpecSections(slug string, ids []string) ([]model.SpecSection, error) {
+func (s *projectDB) GetSpecSections(slug string, ids []string) ([]model.SpecSection, error) {
 	sections, slug, err := s.readSections(slug)
 	if err != nil {
 		return nil, err
@@ -275,7 +275,7 @@ func newMainPage(now time.Time) model.SpecSection {
 // page); a negative or out-of-range position appends it at the end. An empty
 // id is derived from the title; a given id (e.g. from a link to a missing
 // page) must not exist yet.
-func (s *Store) AddSpecSection(slug, id, title, body string, position int) (*model.SpecSection, error) {
+func (s *projectDB) AddSpecSection(slug, id, title, body string, position int) (*model.SpecSection, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return nil, fmt.Errorf("page title is required")
@@ -323,7 +323,7 @@ func (s *Store) AddSpecSection(slug, id, title, body string, position int) (*mod
 
 // UpdateSpecSection changes the title and/or body of a page. A nil value
 // leaves the field unchanged. The page ID stays stable across renames.
-func (s *Store) UpdateSpecSection(slug, id string, title, body *string) (*model.SpecSection, error) {
+func (s *projectDB) UpdateSpecSection(slug, id string, title, body *string, expected ...time.Time) (*model.SpecSection, error) {
 	var sec model.SpecSection
 	err := s.withSpecTx(slug, id, func(tx *sql.Tx, slug string, sections []model.SpecSection) (string, error) {
 		created := false
@@ -337,6 +337,9 @@ func (s *Store) UpdateSpecSection(slug, id string, title, body *string) (*model.
 			return "", fmt.Errorf("spec page '%s' not found in project '%s'", id, slug)
 		}
 		sec = sections[i]
+		if len(expected) > 0 && ((!created && !sec.UpdatedAt.Equal(expected[0])) || (created && !expected[0].IsZero())) {
+			return "", ErrStale
+		}
 		if title != nil {
 			t := strings.TrimSpace(*title)
 			if t == "" {
@@ -348,7 +351,7 @@ func (s *Store) UpdateSpecSection(slug, id string, title, body *string) (*model.
 			sec.Body = strings.TrimSpace(*body)
 			sec.Links = model.ParseSpecLinks(sec.Body)
 		}
-		sec.UpdatedAt = time.Now()
+		sec.UpdatedAt = monotonicTime(sec.UpdatedAt)
 		if created {
 			return "", insertSection(tx, slug, sec, 0)
 		}
@@ -366,11 +369,16 @@ func (s *Store) UpdateSpecSection(slug, id string, title, body *string) (*model.
 
 // DeleteSpecSection removes a page. The main page cannot be deleted; links
 // to the removed page are kept and show up as missing pages.
-func (s *Store) DeleteSpecSection(slug, id string) error {
+func (s *projectDB) DeleteSpecSection(slug, id string, expected ...time.Time) error {
 	if id == model.SpecMainID {
 		return fmt.Errorf("the main spec page cannot be deleted")
 	}
 	return s.withSpecTx(slug, id, func(tx *sql.Tx, slug string, sections []model.SpecSection) (string, error) {
+		if len(expected) > 0 {
+			if e := checkPrecondition(tx, Precondition{Slug: slug, Kind: "spec", ID: id, UpdatedAt: expected[0]}); e != nil {
+				return "", e
+			}
+		}
 		i := sectionIndex(sections, id)
 		if i < 0 {
 			return "", fmt.Errorf("spec page '%s' not found in project '%s'", id, slug)
@@ -386,7 +394,7 @@ func (s *Store) DeleteSpecSection(slug, id string) error {
 
 // MoveSpecSection moves a page to position (0-based, clamped to range). The
 // main page always stays first.
-func (s *Store) MoveSpecSection(slug, id string, position int) error {
+func (s *projectDB) MoveSpecSection(slug, id string, position int) error {
 	if id == model.SpecMainID {
 		return fmt.Errorf("the main spec page cannot be moved")
 	}
