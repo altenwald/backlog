@@ -57,8 +57,14 @@ bundle:
 		'    <string>$(MIN_MACOS_VER)</string>' \
 		'    <key>NSHighResolutionCapable</key>' \
 		'    <true/>' \
+		'    <key>NSLocalNetworkUsageDescription</key>' \
+		'    <string>Find nearby Backlog computers and share projects you choose to open.</string>' \
+		'    <key>NSBonjourServices</key>' \
+		'    <array><string>_backlog._tcp</string></array>' \
 		'</dict>' \
 		'</plist>' > $(BUNDLE_DIR)/Contents/Info.plist
+	@codesign --force --sign - --identifier com.altenwald.backlog --timestamp=none "$(BUNDLE_DIR)"
+	@codesign --verify --strict "$(BUNDLE_DIR)"
 	@echo "✔ Universal $(BUNDLE_DIR) created for macOS $(MIN_MACOS_VER)+!"
 	@file $(BUNDLE_DIR)/Contents/MacOS/backlog
 
@@ -79,4 +85,3 @@ dmg-package:
 
 clean:
 	rm -rf bin/
-

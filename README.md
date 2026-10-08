@@ -93,6 +93,9 @@ If the system Python is older than 3.10, use e.g.
 `make dmg-deps PYTHON=/opt/homebrew/bin/python3`.
 To package an already built or signed bundle without rebuilding it, run
 `make dmg-package`. The artwork and layout sources are in `build/macos/dmg/`.
+Local bundles are ad-hoc signed with the Backlog identifier and their Info.plist
+bound to the signature. Release builds replace this signature with the configured
+Developer ID before packaging and notarization.
 
 
 ---
@@ -216,9 +219,10 @@ Each machine owns its projects and SQLite files. There is no database replicatio
 or offline write queue. Remote clients send requests to the owner and receive
 change notifications through an authenticated TLS WebSocket.
 
-1. Start Backlog on both machines. Open **Network**, wait for discovery, and
-   refresh the list. mDNS uses `_backlog._tcp.local.`. **Connect by address** is
-   available if multicast is blocked.
+1. Start Backlog on both machines. Open **Network**; nearby computers appear
+   automatically. **Refresh** starts a new search. mDNS uses
+   `_backlog._tcp.local.`. **Add address…** accepts a hostname, IP address, or
+   HTTPS URL if multicast is blocked (default port 8486).
 2. Select **Connect**. The receiving machine displays the requesting name and
    address and asks for approval. After acceptance it shows a random one-time
    code; enter it on the initiating machine. Requests expire after two minutes
@@ -234,6 +238,16 @@ The LAN listener uses `--port + 2` (8486 by default); REST and MCP remain bound 
 loopback on 8484/8485. Allow the LAN TCP port and mDNS UDP 5353 through the local
 firewall. The connection is directional: pairing A to B lets A use B's open
 projects. Pair in the other direction to expose A's projects to B as well.
+
+On macOS, allow Backlog under **System Settings → Privacy & Security → Local
+Network**. The app bundle declares its Bonjour service and the purpose of local
+network access, as described in [Apple's local network guidance](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy).
+Discovery failures are logged and shown briefly in the Network window.
+For diagnostics, `curl -k https://HOST:8486/pair` should return `426 Upgrade
+Required`: TLS succeeded, but the endpoint requires a WebSocket. Plain HTTP
+returns `400` with “Client sent an HTTP request to an HTTPS server.” The `-k`
+option is only for this diagnostic; Backlog itself verifies the peer identity
+through OTP pairing and certificate pinning.
 
 Remote GUI reads use an in-memory snapshot. Notifications refresh that snapshot;
 reconnection uses exponential backoff and reloads the catalog and selected

@@ -18,6 +18,10 @@ import (
 )
 
 func dial(ctx context.Context, address, path, pin, token string) (*websocket.Conn, string, error) {
+	address, err := NormalizeAddress(address)
+	if err != nil {
+		return nil, "", err
+	}
 	var fp string
 	tr := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13, InsecureSkipVerify: true, // verified by pin, or bound to the OTP proof during bootstrap
 		VerifyConnection: func(cs tls.ConnectionState) error {
@@ -37,6 +41,9 @@ func dial(ctx context.Context, address, path, pin, token string) (*websocket.Con
 	c, _, e := websocket.Dial(ctx, "wss://"+address+path, &websocket.DialOptions{HTTPClient: &http.Client{Transport: tr}, HTTPHeader: h})
 	if e != nil {
 		tr.CloseIdleConnections()
+		if errors.Is(e, http.ErrSchemeMismatch) {
+			return nil, "", fmt.Errorf("%s is not a Backlog TLS port; use the LAN port (default 8486)", address)
+		}
 		return nil, "", e
 	}
 	c.SetReadLimit(64 << 20)
@@ -46,6 +53,11 @@ func dial(ctx context.Context, address, path, pin, token string) (*websocket.Con
 // Pair never sends the OTP itself. Its proof is bound to the TLS certificate and
 // a fresh challenge, so an intermediary cannot relay it to a different endpoint.
 func Pair(ctx context.Context, peer Peer, name string, getOTP func(context.Context) (string, error)) (Peer, error) {
+	address, e := NormalizeAddress(peer.Address)
+	if e != nil {
+		return peer, e
+	}
+	peer.Address = address
 	c, fp, e := dial(ctx, peer.Address, "/pair", "", "")
 	if e != nil {
 		return peer, e

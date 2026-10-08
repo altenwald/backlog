@@ -4,8 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"net"
+	"reflect"
+	"runtime"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -43,7 +48,7 @@ func (ba *BacklogApp) configureNetwork() {
 				w.SetCloseIntercept(nil)
 				w.Close()
 			})
-			w.SetContent(container.NewVBox(widget.NewLabel(fmt.Sprintf("Accept a connection from %s?\n%s\nThe name is supplied by the requesting machine.", req.Name, req.Address)), container.NewHBox(widget.NewButton("Decline", func() { answer(false) }), widget.NewButton("Accept", func() { answer(true) }))))
+			w.SetContent(container.NewVBox(widget.NewLabel(fmt.Sprintf("Connect with %s?\n%s", req.Name, req.Address)), container.NewHBox(widget.NewButton("Decline", func() { answer(false) }), widget.NewButton("Accept", func() { answer(true) }))))
 			w.Resize(fyne.NewSize(480, 180))
 			w.Show()
 		})
@@ -53,7 +58,7 @@ func (ba *BacklogApp) configureNetwork() {
 			w := ba.fyneApp.NewWindow("Backlog pairing code")
 			entry := widget.NewEntry()
 			entry.SetText(otp)
-			w.SetContent(container.NewVBox(widget.NewLabel("Enter this one-time code on "+name+".\nIt expires with the pairing request after two minutes."), entry, widget.NewButton("Copy", func() { w.Clipboard().SetContent(otp) }), widget.NewButton("Close", w.Close)))
+			w.SetContent(container.NewVBox(widget.NewLabel("Enter this code on "+name+". Expires in 2 minutes."), entry, widget.NewButton("Copy", func() { w.Clipboard().SetContent(otp) }), widget.NewButton("Close", w.Close)))
 			w.Resize(fyne.NewSize(520, 190))
 			w.Show()
 		})
@@ -77,8 +82,8 @@ func (ba *BacklogApp) showNetwork() {
 				result := make(chan string, 1)
 				fyne.Do(func() {
 					entry := widget.NewEntry()
-					entry.SetPlaceHolder("One-time code shown on the other machine")
-					d := dialog.NewForm("Pair with "+p.Name, "Connect", "Cancel", []*widget.FormItem{widget.NewFormItem("OTP", entry)}, func(ok bool) {
+					entry.SetPlaceHolder("Code from the other computer")
+					d := dialog.NewForm("Pair with "+p.Name, "Connect", "Cancel", []*widget.FormItem{widget.NewFormItem("Code", entry)}, func(ok bool) {
 						if !ok {
 							cancel()
 							return
@@ -88,7 +93,7 @@ func (ba *BacklogApp) showNetwork() {
 						default:
 						}
 					}, ba.window)
-					d.Resize(fyne.NewSize(560, 160))
+					d.Resize(fyne.NewSize(420, 160))
 					d.Show()
 				})
 				select {
@@ -101,7 +106,10 @@ func (ba *BacklogApp) showNetwork() {
 			fyne.Do(func() {
 				waiting.Hide()
 				if e != nil {
-					dialog.ShowError(e, ba.window)
+					if !errors.Is(e, context.Canceled) {
+						log.Printf("[Backlog LAN] connect to %s: %v", p.Address, e)
+						dialog.ShowInformation("Could not connect", connectionMessage(e), ba.window)
+					}
 				} else {
 					refresh()
 				}
@@ -113,7 +121,7 @@ func (ba *BacklogApp) showNetwork() {
 		rows.Objects = nil
 		for _, p := range h.Peers() {
 			peer := p
-			status := "Discovered"
+			status := "Available"
 			if p.Token != "" {
 				status = "Paired"
 			}
@@ -135,31 +143,96 @@ func (ba *BacklogApp) showNetwork() {
 					dialog.ShowError(e, ba.window)
 				}
 				refresh()
-			}), widget.NewLabel("Allowed incoming: "+name)))
+			}), widget.NewLabel(name+" · Can access your projects")))
 		}
 		if len(rows.Objects) == 0 {
-			rows.Add(widget.NewLabel("No machines discovered yet. Refresh or enter an address."))
+			rows.Add(widget.NewLabel("Searching for computers…"))
 		}
 		rows.Refresh()
 	}
 	refresh()
-	address := widget.NewEntry()
-	address.SetPlaceHolder("IP address:port (default port 8486)")
-	manual := widget.NewButton("Connect by address", func() {
-		a := strings.TrimSpace(address.Text)
-		if a == "" {
-			return
+	status := widget.NewLabel("")
+	updateStatus := func() {
+		if h.Service.DiscoveryError() != "" {
+			status.SetText("Discovery unavailable. Add an address to connect.")
+		} else {
+			status.SetText("")
 		}
-		if !strings.Contains(a, ":") {
-			a += ":8486"
-		}
-		connect(network.Peer{Name: a, Address: a})
+	}
+	manual := widget.NewButton("Add address…", func() {
+		address := widget.NewEntry()
+		address.SetPlaceHolder("192.168.1.20:8486")
+		d := dialog.NewForm("Connect to computer", "Connect", "Cancel", []*widget.FormItem{widget.NewFormItem("Address", address)}, func(ok bool) {
+			if !ok {
+				return
+			}
+			a, err := network.NormalizeAddress(address.Text)
+			if err != nil {
+				dialog.ShowError(err, ba.window)
+				return
+			}
+			connect(network.Peer{Name: a, Address: a})
+		}, ba.window)
+		d.Resize(fyne.NewSize(420, 160))
+		d.Show()
 	})
-	content := container.NewBorder(widget.NewLabel("Nearby Backlog machines · "+h.Service.Name), container.NewVBox(widget.NewButton("Refresh", refresh), address, manual), nil, nil, container.NewVScroll(rows))
+	search := widget.NewButton("Refresh", func() { h.Service.RefreshDiscovery(); refresh(); updateStatus() })
+	content := container.NewBorder(nil, container.NewVBox(status, container.NewHBox(search, manual)), nil, nil, container.NewVScroll(rows))
 	d := dialog.NewCustom("Network", "Close", content, ba.window)
-	d.Resize(fyne.NewSize(660, 440))
+	d.Resize(fyne.NewSize(520, 320))
+	ctx, stop := context.WithCancel(context.Background())
+	d.SetOnClosed(stop)
+	updateStatus()
 	d.Show()
+	h.Service.RefreshDiscovery()
+	// Update this dialog only while open; discovery does not depend on GUI polling.
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		var previous []network.Peer
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				peers := h.Peers()
+				changed := !reflect.DeepEqual(previous, peers)
+				previous = peers
+				fyne.Do(func() {
+					if ctx.Err() == nil {
+						if changed {
+							refresh()
+						}
+						updateStatus()
+					}
+				})
+			}
+		}
+	}()
+
 }
+
+func connectionMessage(err error) string {
+	if errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) || errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM) {
+		if runtime.GOOS == "darwin" {
+			return "Check the address and Backlog’s Local Network permission in System Settings."
+		}
+		return "Check the address, network connection and firewall."
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return "Open Backlog on the other computer and check the port."
+	}
+	var timeout net.Error
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &timeout) && timeout.Timeout()) {
+		return "Connection timed out. Check the other computer and try again."
+	}
+	// Pairing refusals and incorrect codes are already short, useful messages.
+	if !strings.Contains(err.Error(), "failed to WebSocket dial") {
+		return err.Error()
+	}
+	return "Check the address and that the other computer is running Backlog."
+}
+
 func (ba *BacklogApp) showSharing() {
 	slug := ba.store.GetActiveProjectSlug()
 	if slug == "" {

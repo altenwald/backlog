@@ -16,6 +16,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"net"
 	"net/http"
@@ -57,17 +58,20 @@ type PairRequest struct {
 	ShowOTP func(string)
 }
 type Service struct {
-	Store         *store.Store
-	Name, ID      string
-	OnPair        func(PairRequest)
-	OnOTP         func(string, string)
-	OnPeer        func(Peer)
-	mu            sync.Mutex
-	trusted       map[string]string // token hash -> requesting machine name
-	server        *http.Server
-	advertisement *zeroconf.Server
-	cert          tls.Certificate
-	pending       chan struct{}
+	Store            *store.Store
+	Name, ID         string
+	OnPair           func(PairRequest)
+	OnOTP            func(string, string)
+	OnPeer           func(Peer)
+	mu               sync.Mutex
+	trusted          map[string]string // token hash -> requesting machine name
+	server           *http.Server
+	advertisement    *zeroconf.Server
+	cert             tls.Certificate
+	pending          chan struct{}
+	refreshDiscovery chan struct{}
+	listenAddress    string
+	discoveryError   string
 }
 
 func randomToken() string {
@@ -86,7 +90,7 @@ func proof(otp, fp, nonce string) string {
 }
 func NewService(st *store.Store) (*Service, error) {
 	name, _ := os.Hostname()
-	s := &Service{Store: st, Name: name, trusted: map[string]string{}, pending: make(chan struct{}, 3)}
+	s := &Service{Store: st, Name: name, trusted: map[string]string{}, pending: make(chan struct{}, 3), refreshDiscovery: make(chan struct{}, 1)}
 	_ = json.Unmarshal([]byte(st.LocalSetting("network.trusted")), &s.trusted)
 	certPath := filepath.Join(st.GetDataDir(), "network-cert.pem")
 	keyPath := filepath.Join(st.GetDataDir(), "network-key.pem")
@@ -124,72 +128,133 @@ func NewService(st *store.Store) (*Service, error) {
 	return s, nil
 }
 func (s *Service) Start(ctx context.Context, port int) error {
-	ln, e := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	if e != nil {
-		return e
+	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", port), &tls.Config{Certificates: []tls.Certificate{s.cert}, MinVersion: tls.VersionTLS13})
+	if err != nil {
+		return err
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/pair", s.pair)
 	mux.HandleFunc("/ws", s.socket)
 	s.server = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
-	adv, e := zeroconf.Register(s.ID[:16], discoveryService, "local.", ln.Addr().(*net.TCPAddr).Port, []string{"id=" + s.ID, "name=" + s.Name, "v=1"}, nil)
-	if e == nil {
-		s.advertisement = adv
-	} // Manual addresses still work on networks without multicast.
+	s.mu.Lock()
+	s.listenAddress = ln.Addr().String()
+	s.mu.Unlock()
+	log.Printf("[Backlog LAN] TLS listening on %s", ln.Addr())
+	go func() { <-ctx.Done(); s.server.Close() }()
 	go func() {
-		<-ctx.Done()
+		if err := s.server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("[Backlog LAN] listener: %v", err)
+		}
+	}()
+	go s.discover(ctx, ln.Addr().(*net.TCPAddr).Port)
+	return nil
+}
+
+func (s *Service) ListenAddress() string  { s.mu.Lock(); defer s.mu.Unlock(); return s.listenAddress }
+func (s *Service) DiscoveryError() string { s.mu.Lock(); defer s.mu.Unlock(); return s.discoveryError }
+func (s *Service) setDiscoveryError(err error) {
+	message := ""
+	if err != nil {
+		message = err.Error()
+	}
+	s.mu.Lock()
+	changed := s.discoveryError != message
+	s.discoveryError = message
+	s.mu.Unlock()
+	if changed && err != nil {
+		log.Printf("[Backlog LAN] discovery: %v", err)
+	}
+}
+
+// RefreshDiscovery interrupts the current scan or retry delay and starts a new query.
+func (s *Service) RefreshDiscovery() {
+	select {
+	case s.refreshDiscovery <- struct{}{}:
+	default:
+	}
+}
+
+func (s *Service) discover(ctx context.Context, port int) {
+	defer func() {
 		if s.advertisement != nil {
 			s.advertisement.Shutdown()
 		}
-		s.server.Close()
 	}()
-	go s.discover(ctx)
-	go s.server.Serve(tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{s.cert}, MinVersion: tls.VersionTLS13}))
-	return nil
-}
-func (s *Service) discover(ctx context.Context) {
 	for ctx.Err() == nil {
-		resolver, e := zeroconf.NewResolver(nil)
-		if e != nil {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(20 * time.Second):
-				continue
-			}
+		var advertiseErr error
+		if s.advertisement == nil {
+			s.advertisement, advertiseErr = zeroconf.Register(s.ID[:16], discoveryService, "local.", port, []string{"id=" + s.ID, "name=" + s.Name, "v=1"}, nil)
 		}
-		scan, cancel := context.WithTimeout(ctx, 8*time.Second)
-		entries := make(chan *zeroconf.ServiceEntry, 16)
-		go func() {
-			for entry := range entries {
-				p := Peer{Name: entry.Instance}
-				for _, v := range entry.Text {
-					if strings.HasPrefix(v, "id=") {
-						p.ID = strings.TrimPrefix(v, "id=")
+		resolver, err := zeroconf.NewResolver(nil)
+		if err == nil {
+			scan, cancel := context.WithTimeout(ctx, 8*time.Second)
+			entries := make(chan *zeroconf.ServiceEntry, 16)
+			err = resolver.Browse(scan, discoveryService, "local.", entries)
+			s.setDiscoveryError(errors.Join(advertiseErr, err))
+			if err == nil {
+			scanLoop:
+				for {
+					select {
+					case entry, ok := <-entries:
+						if !ok {
+							break scanLoop
+						}
+						if p, ok := discoveredPeer(entry); ok && p.ID != s.ID && s.OnPeer != nil {
+							s.OnPeer(p)
+						}
+					case <-s.refreshDiscovery:
+						break scanLoop
+					case <-scan.Done():
+						break scanLoop
 					}
-					if strings.HasPrefix(v, "name=") {
-						p.Name = strings.TrimPrefix(v, "name=")
-					}
-				}
-				if len(entry.AddrIPv4) > 0 {
-					p.Address = net.JoinHostPort(entry.AddrIPv4[0].String(), fmt.Sprint(entry.Port))
-				} else if len(entry.AddrIPv6) > 0 {
-					p.Address = net.JoinHostPort(entry.AddrIPv6[0].String(), fmt.Sprint(entry.Port))
-				}
-				if p.ID != "" && p.ID != s.ID && p.Address != "" && s.OnPeer != nil {
-					s.OnPeer(p)
 				}
 			}
-		}()
-		_ = resolver.Browse(scan, discoveryService, "local.", entries)
-		<-scan.Done()
-		cancel()
+			cancel()
+			// The resolver closes entries on cancellation. Drain so its producer can exit.
+			for range entries {
+			}
+		} else {
+			s.setDiscoveryError(errors.Join(advertiseErr, err))
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(12 * time.Second):
+		case <-s.refreshDiscovery:
+		case <-time.After(time.Second):
 		}
 	}
+}
+
+func discoveredPeer(entry *zeroconf.ServiceEntry) (Peer, bool) {
+	p := Peer{Name: entry.Instance}
+	for _, v := range entry.Text {
+		if strings.HasPrefix(v, "id=") {
+			p.ID = strings.TrimPrefix(v, "id=")
+		}
+		if strings.HasPrefix(v, "name=") {
+			p.Name = strings.TrimPrefix(v, "name=")
+		}
+	}
+	// Prefer usable IPv4, then global/ULA IPv6. A link-local IPv6 address without
+	// an interface scope cannot be dialled; let the OS resolve the mDNS hostname.
+	for _, ip := range entry.AddrIPv4 {
+		if !ip.IsLoopback() && !ip.IsUnspecified() {
+			p.Address = net.JoinHostPort(ip.String(), fmt.Sprint(entry.Port))
+			break
+		}
+	}
+	if p.Address == "" {
+		for _, ip := range entry.AddrIPv6 {
+			if !ip.IsLinkLocalUnicast() && !ip.IsLoopback() && !ip.IsUnspecified() {
+				p.Address = net.JoinHostPort(ip.String(), fmt.Sprint(entry.Port))
+				break
+			}
+		}
+	}
+	if p.Address == "" && entry.HostName != "" {
+		p.Address = net.JoinHostPort(strings.TrimSuffix(entry.HostName, "."), fmt.Sprint(entry.Port))
+	}
+	return p, p.ID != "" && p.Address != "" && entry.Port > 0 && entry.Port <= 65535
 }
 func (s *Service) pair(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Origin") != "" {

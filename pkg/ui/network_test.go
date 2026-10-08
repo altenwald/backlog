@@ -2,6 +2,11 @@ package ui
 
 import (
 	"errors"
+	"fmt"
+	"net"
+	"runtime"
+	"strings"
+	"syscall"
 	"testing"
 
 	"fyne.io/fyne/v2/test"
@@ -60,5 +65,16 @@ func TestReapplyTaskDraftKeepsConcurrentUneditedFields(t *testing.T) {
 	merged := reapplyTaskDraft(base, draft, current)
 	if merged.Title != "My title" || merged.Assignee != "B" || merged.Size != model.SizeXL {
 		t.Fatalf("reapplying draft overwrote other edits: %+v", merged)
+	}
+}
+
+func TestConnectionMessageHidesTransportStack(t *testing.T) {
+	err := fmt.Errorf("failed to WebSocket dial: %w", &net.OpError{Op: "dial", Net: "tcp", Err: syscall.EHOSTUNREACH})
+	message := connectionMessage(err)
+	if strings.Contains(message, "WebSocket") || strings.Contains(message, "https://") || len(message) > 120 {
+		t.Fatalf("transport details leaked into dialog: %s", message)
+	}
+	if runtime.GOOS == "darwin" && !strings.Contains(message, "Local Network") {
+		t.Fatalf("missing permission guidance: %s", message)
 	}
 }
